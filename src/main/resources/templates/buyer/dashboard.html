@@ -95,7 +95,7 @@
                     <tr th:each="offer : ${myOffers}">
                         <td>
                             <div class="d-flex align-items-center gap-3">
-                                <img th:src="${offer.listing.imageUrl}" th:alt="${offer.listing.title}" class="rounded-3" style="width: 48px; height: 48px; object-fit: cover;">
+                                <img th:src="${offer.listing.imageUrl}" th:alt="${offer.listing.title}" class="rounded-3" style="width: 48px; height: 48px; object-fit: cover;" onerror="this.onerror=null;this.src='/images/listing-placeholder.svg';">
                                 <div>
                                     <a th:href="@{'/listings/' + ${offer.listing.id}}" class="fw-bold text-dark text-decoration-none" th:text="${offer.listing.title}">Listing Title</a>
                                     <div class="small text-muted"><i class="bi bi-geo-alt me-1"></i><span th:text="${offer.listing.location}">Location</span></div>

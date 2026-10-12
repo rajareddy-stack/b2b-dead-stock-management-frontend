@@ -230,6 +230,7 @@ body {
 }
 
 .card-surplus {
+    min-width: 0;
     transition: border-color 0.15s ease;
 }
 
@@ -237,11 +238,42 @@ body {
     border-color: #99c8c3 !important;
 }
 
+.card-surplus .card-body {
+    min-width: 0;
+}
+
 .listing-thumbnail {
+    display: block;
     width: 100%;
     height: 190px;
     object-fit: cover;
     background: #f1f5f9;
+}
+
+.listing-meta {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 0.75rem;
+}
+
+.listing-location {
+    min-width: 0;
+    flex: 1 1 12rem;
+    overflow-wrap: anywhere;
+    text-align: right;
+}
+
+.card-surplus .card-title {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.breadcrumb {
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
 }
 
 .price-original {
@@ -557,6 +589,11 @@ body {
 
     .listing-thumbnail {
         height: 170px;
+    }
+
+    .listing-location {
+        flex-basis: 100%;
+        text-align: left;
     }
 
     .mobile-card-table thead {

@@ -21,7 +21,7 @@
         <!-- Left: Image & Specs -->
         <div class="col-lg-7">
             <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4 bg-white">
-                <img th:src="${listing.imageUrl}" th:alt="${listing.title}" class="img-fluid w-100" style="max-height: 440px; object-fit: cover;">
+                <img th:src="${listing.imageUrl}" th:alt="${listing.title}" class="img-fluid w-100" style="max-height: 440px; object-fit: cover;" onerror="this.onerror=null;this.src='/images/listing-placeholder.svg';">
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2 rounded-pill fw-semibold" th:text="${listing.category.title}">Category</span>

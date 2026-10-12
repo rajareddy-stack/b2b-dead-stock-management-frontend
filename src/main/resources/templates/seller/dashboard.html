@@ -194,7 +194,7 @@
                             th:attr="data-search=${#strings.toLowerCase(item.title)},data-category=${item.category.title},data-status=${item.status.name()},data-location=${item.location},data-age=${@india.daysListed(item.createdAt)},data-value=${item.originalPrice.doubleValue() * item.quantity}">
                             <td data-label="Product">
                                 <div class="d-flex align-items-center gap-2">
-                                    <img th:src="${item.imageUrl != null and !item.imageUrl.isEmpty() ? item.imageUrl : 'https://placehold.co/80x80/f1f5f9/64748b?text=Stock'}" th:alt="${item.title}" class="rounded-2" style="width:42px;height:42px;object-fit:cover">
+                                    <img th:src="${item.imageUrl != null and !item.imageUrl.isEmpty() ? item.imageUrl : '/images/listing-placeholder.svg'}" th:alt="${item.title}" class="rounded-2" style="width:42px;height:42px;object-fit:cover" onerror="this.onerror=null;this.src='/images/listing-placeholder.svg';">
                                     <div class="min-w-0">
                                         <a th:href="@{'/listings/' + ${item.id}}" class="fw-semibold text-dark text-decoration-none" th:text="${item.title}">Product</a>
                                         <div class="small text-muted" th:text="${item.category.title}">Category</div>
