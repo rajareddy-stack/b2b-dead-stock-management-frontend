@@ -1,8 +1,18 @@
 # Frontend
 
-This folder contains the application's Thymeleaf templates and static styles:
+The Vite + React single-page application for the B2B Dead Stock marketplace. It supports public browsing, buyer and seller workflows, business profiles, notifications, and admin tools.
 
-- `src/main/resources/templates/` — server-rendered pages and shared layouts.
-- `src/main/resources/static/` — stylesheets and other browser assets.
+## Local development
 
-The UI is rendered by the Spring Boot backend and is not a standalone application. The backend repository includes a copy of these templates and assets so it can run independently; keep the two copies in sync when changing the UI.
+```powershell
+npm install
+npm run dev
+```
+
+Vite proxies `/api` requests to `http://localhost:8080` by default. Set `BACKEND_API_URL` before `npm run dev` to use a different local API. On Vercel, the serverless API proxy forwards requests to the `BACKEND_API_URL` environment variable.
+
+## Vercel deployment
+
+Deploy this directory as the Vercel project root. Set `BACKEND_API_URL` to the public Render API origin (for example, `https://b2b-dead-stock-api.onrender.com`). The `/api/*` serverless proxy forwards API calls and the session cookie so browser requests remain same-origin.
+
+The older `src/main/resources/templates` files are retained for the Spring backend's legacy server-rendered routes; the React application is the deployed Vercel UI.

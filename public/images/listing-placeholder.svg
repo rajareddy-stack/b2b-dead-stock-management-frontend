@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="480" viewBox="0 0 960 480" fill="none">
+  <rect width="960" height="480" fill="#F0FDFA"/>
+  <path d="M0 356h960v124H0z" fill="#CCFBF1"/>
+  <path d="M370 196h220l38 38v108H332V234l38-38Z" fill="#0F766E" opacity=".12"/>
+  <path d="M382 208h196v122H382z" stroke="#0F766E" stroke-width="10"/>
+  <path d="m382 244 98 51 98-51M480 295v35" stroke="#0F766E" stroke-linecap="round" stroke-linejoin="round" stroke-width="10"/>
+  <circle cx="480" cy="137" r="34" fill="#0F766E" opacity=".16"/>
+  <path d="M463 137h34m-17-17v34" stroke="#0F766E" stroke-linecap="round" stroke-width="8"/>
+  <text x="480" y="393" fill="#115E59" font-family="Arial, sans-serif" font-size="22" font-weight="600" text-anchor="middle">PRODUCT IMAGE UNAVAILABLE</text>
+</svg>
