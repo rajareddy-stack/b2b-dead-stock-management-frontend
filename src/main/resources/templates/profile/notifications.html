@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout/base :: head('Deal Notifications')}"></head>
+<body class="bg-light">
+
+<div th:replace="~{layout/base :: navbar}"></div>
+<div th:replace="~{layout/base :: alerts}"></div>
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h4 class="fw-bold mb-1"><i class="bi bi-bell text-primary me-2"></i>Deal &amp; Negotiation Alerts</h4>
+                        <p class="text-muted small mb-0">Stay updated on offers, price counter-proposals, and deal completions</p>
+                    </div>
+                    <form th:action="@{/profile/notifications/read-all}" method="post" th:if="${!notifications.empty}">
+                        <button type="submit" class="btn btn-outline-secondary btn-sm">Mark All as Read</button>
+                    </form>
+                </div>
+
+                <div th:if="${notifications.empty}" class="text-center py-5">
+                    <div class="stat-icon bg-light text-muted mx-auto mb-3">
+                        <i class="bi bi-bell-slash fs-3"></i>
+                    </div>
+                    <h6 class="fw-bold">No Notifications</h6>
+                    <p class="text-muted small mb-0">You're all caught up! New alerts will appear here when counterparties negotiate.</p>
+                </div>
+
+                <div class="list-group list-group-flush" th:unless="${notifications.empty}">
+                    <div th:each="n : ${notifications}" 
+                         class="list-group-item p-3 border rounded-3 mb-2 transition-all"
+                         th:classappend="${!n.isRead ? 'bg-light border-primary' : 'bg-white'}">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <h6 class="fw-bold mb-0 text-dark">
+                                <span class="badge bg-primary me-1" th:if="${!n.isRead}">NEW</span>
+                                <span th:text="${n.title}">Notification Title</span>
+                            </h6>
+                            <small class="text-muted" th:text="${#temporals.format(n.createdAt, 'dd MMM, HH:mm')}">Date</small>
+                        </div>
+                        <p class="small text-secondary mb-2" th:text="${n.message}">Notification message details</p>
+                        <div class="d-flex gap-2 align-items-center">
+                            <a th:if="${n.linkUrl != null}" th:href="${n.linkUrl}" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.75rem;">
+                                View Deal <i class="bi bi-arrow-right"></i>
+                            </a>
+                            <form th:if="${!n.isRead}" th:action="@{'/profile/notifications/read/' + ${n.id}}" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-link text-muted p-0" style="font-size: 0.75rem;">Mark as read</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div th:replace="~{layout/base :: footer}"></div>
+<div th:replace="~{layout/base :: scripts}"></div>
+
+</body>
+</html>

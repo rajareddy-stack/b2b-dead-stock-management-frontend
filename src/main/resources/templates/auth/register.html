@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout/base :: head('Business Registration')}"></head>
+<body class="bg-light">
+
+<div th:replace="~{layout/base :: navbar}"></div>
+<div th:replace="~{layout/base :: alerts}"></div>
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 rounded-4 p-4 p-md-5 bg-white">
+                <div class="text-center mb-4">
+                    <div class="stat-icon bg-primary bg-opacity-10 text-primary mx-auto mb-2">
+                        <i class="bi bi-building-add fs-3"></i>
+                    </div>
+                    <h3 class="fw-bold">Register Business Account</h3>
+                    <p class="text-muted small">Join verified B2B counterparties trading excess &amp; dead stock inventory</p>
+                </div>
+
+                <form th:action="@{/register}" th:object="${registerRequest}" method="post">
+                    
+                    <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3 small">1. Account Type &amp; User Info</h6>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Select Your Role</label>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <input type="radio" class="btn-check" name="role" id="roleSeller" value="SELLER" th:field="*{role}" checked>
+                                <label class="btn btn-outline-warning text-dark w-100 py-3 text-start d-flex align-items-center gap-3" for="roleSeller">
+                                    <i class="bi bi-shop fs-3"></i>
+                                    <div>
+                                        <div class="fw-bold">Seller Business</div>
+                                        <small class="text-muted">Liquidate excess inventory &amp; dead stock</small>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="col-md-6">
+                                <input type="radio" class="btn-check" name="role" id="roleBuyer" value="BUYER" th:field="*{role}">
+                                <label class="btn btn-outline-info text-dark w-100 py-3 text-start d-flex align-items-center gap-3" for="roleBuyer">
+                                    <i class="bi bi-cart-check fs-3"></i>
+                                    <div>
+                                        <div class="fw-bold">Buyer Business</div>
+                                        <small class="text-muted">Source discounted surplus &amp; raw materials</small>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Authorized Representative Name</label>
+                            <input type="text" th:field="*{fullName}" class="form-control" placeholder="Full name" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('fullName')}" th:errors="*{fullName}"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Business Email Address</label>
+                            <input type="email" th:field="*{email}" class="form-control" placeholder="corporate@company.com" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Account Password</label>
+                            <input type="password" th:field="*{password}" class="form-control" placeholder="Minimum 6 characters" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Contact Phone Number</label>
+                            <input type="tel" th:field="*{phone}" class="form-control" placeholder="+91 98765 43210" autocomplete="tel" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('phone')}" th:errors="*{phone}"></div>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-uppercase text-muted border-bottom pb-2 mb-3 small">2. Business Verification Details</h6>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Registered Company Name</label>
+                            <input type="text" th:field="*{companyName}" class="form-control" placeholder="Legal Entity Name" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('companyName')}" th:errors="*{companyName}"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">GSTIN or business registration ID</label>
+                            <input type="text" th:field="*{taxId}" class="form-control" placeholder="Enter GSTIN if registered, or another business ID" required>
+                            <div class="form-text">GST registration is not assumed. Enter another business registration ID if you are not GST-registered.</div>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('taxId')}" th:errors="*{taxId}"></div>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold small">Warehouse / Physical Business Address</label>
+                            <input type="text" th:field="*{address}" class="form-control" placeholder="Street address, building, suite" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('address')}" th:errors="*{address}"></div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small">City</label>
+                            <input type="text" th:field="*{city}" class="form-control" placeholder="e.g. Ahmedabad" autocomplete="address-level2" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('city')}" th:errors="*{city}"></div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small">State</label>
+                            <input type="text" th:field="*{state}" class="form-control" placeholder="e.g. Gujarat" autocomplete="address-level1" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('state')}" th:errors="*{state}"></div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small">PIN code</label>
+                            <input type="text" th:field="*{postalCode}" class="form-control" placeholder="6-digit PIN code" inputmode="numeric" autocomplete="postal-code">
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold small">Industry Classification</label>
+                            <select th:field="*{industryType}" class="form-select">
+                                <option value="Manufacturing & Fabrication">Manufacturing &amp; Fabrication</option>
+                                <option value="Construction & Infrastructure">Construction &amp; Infrastructure</option>
+                                <option value="Wholesale & Distribution">Wholesale &amp; Distribution</option>
+                                <option value="Hospitality & Food Service">Hospitality &amp; Food Service</option>
+                                <option value="Textiles & Apparel">Textiles &amp; Apparel</option>
+                                <option value="Logistics & Warehousing">Logistics &amp; Warehousing</option>
+                                <option value="Other Commercial Sector">Other Commercial Sector</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-check mb-4">
+                        <input class="form-check-input" type="checkbox" id="termsCheck" required checked>
+                        <label class="form-check-label small text-muted" for="termsCheck">
+                            I certify that I am an authorized representative of this business and agree to B2B Surplus trading terms.
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-3 fw-semibold">
+                        <i class="bi bi-shield-check me-1"></i> Complete Registration &amp; Submit
+                    </button>
+                </form>
+
+                <div class="mt-4 text-center small text-muted">
+                    Already registered? 
+                    <a th:href="@{/login}" class="fw-semibold text-primary text-decoration-none">Sign in here</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div th:replace="~{layout/base :: footer}"></div>
+<div th:replace="~{layout/base :: scripts}"></div>
+
+</body>
+</html>

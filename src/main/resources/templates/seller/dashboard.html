@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout/base :: head('Seller Dashboard')}"></head>
+<body>
+
+<div th:replace="~{layout/base :: navbar}"></div>
+<div th:replace="~{layout/base :: alerts}"></div>
+
+<main class="container dashboard-page">
+    <header class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+        <div>
+            <p class="text-muted small mb-1" th:text="${currentUser != null and currentUser.businessProfile != null ? currentUser.businessProfile.companyName : 'Seller workspace'}">Seller workspace</p>
+            <h1 class="page-title">Good to see you</h1>
+            <p class="text-muted mb-0 mt-1">Track capital tied up in active listings and act on buyer interest.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a th:href="@{/seller/listings/create}" class="btn btn-primary"><i class="bi bi-tag me-1"></i>List stock for liquidation</a>
+        </div>
+    </header>
+
+    <section class="row g-3 mb-4" aria-label="Inventory summary">
+        <div class="col-6 col-xl-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                        <div class="small text-muted mb-2">Total tied-up capital</div>
+                        <div class="fs-4 fw-bold" th:text="${@india.currency(tiedUpCapital)}">₹0.00</div>
+                        <div class="small text-muted mt-1">Recorded purchase value of active stock</div>
+                    </div>
+                    <span class="stat-icon text-primary" style="background:#eff6ff"><i class="bi bi-currency-rupee"></i></span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                        <div class="small text-muted mb-2">Listed value</div>
+                        <div class="fs-4 fw-bold" th:text="${@india.currency(listedStockValue)}">₹0.00</div>
+                        <div class="small text-muted mt-1">At current asking prices</div>
+                    </div>
+                    <span class="stat-icon text-primary" style="background:#eff6ff"><i class="bi bi-tag"></i></span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                        <div class="small text-muted mb-2">Active listings</div>
+                        <div class="fs-4 fw-bold" th:text="${activeListingCount}">0</div>
+                        <div class="small text-muted mt-1">Quantities shown in each product’s unit</div>
+                    </div>
+                    <span class="stat-icon text-primary" style="background:#eff6ff"><i class="bi bi-tags"></i></span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                        <div class="small text-muted mb-2">Pending buyer offers</div>
+                        <div class="fs-4 fw-bold" th:text="${pendingOfferCount}">0</div>
+                        <a class="small text-decoration-none" th:href="@{/seller/offers}">Review offers <i class="bi bi-arrow-right"></i></a>
+                    </div>
+                    <span class="stat-icon text-warning" style="background:#fffbeb"><i class="bi bi-chat-square-text"></i></span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="row g-3 mb-4">
+        <div class="col-lg-7">
+            <div class="card p-3 p-md-4 h-100">
+                <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                    <div>
+                        <h2 class="section-title mb-1">Listing age breakdown</h2>
+                        <p class="small text-muted mb-0">Time since each active listing was published.</p>
+                    </div>
+                    <span class="text-muted small text-nowrap">By purchase value</span>
+                </div>
+                <div class="age-breakdown-row" th:each="bucket : ${ageBuckets}">
+                    <span class="age-indicator" th:classappend="${'age-' + bucket.tone}"></span>
+                    <span class="small flex-grow-1" th:text="${bucket.label}">Under 30 days</span>
+                    <span class="small text-muted" th:text="${bucket.listings + ' listings'}">0 listings</span>
+                    <span class="small fw-semibold text-end age-value" th:text="${@india.currency(bucket.value)}">₹0.00</span>
+                </div>
+                <p class="small text-muted border-top pt-3 mb-0 mt-2">Listing age is not inventory age. Stock receipt dates are not recorded in this system.</p>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card p-3 p-md-4 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h2 class="section-title mb-1">Capital by category</h2>
+                        <p class="small text-muted mb-0">Recorded purchase value of active listings.</p>
+                    </div>
+                </div>
+                <div th:if="${topCategories.empty}" class="small text-muted py-3">Category totals will appear when you add active listings.</div>
+                <div th:each="category : ${topCategories}" class="category-summary-row">
+                    <div class="min-w-0">
+                        <div class="small fw-semibold text-truncate" th:text="${category.name}">Category</div>
+                        <div class="small text-muted" th:text="${category.listings + ' listings'}">0 listings</div>
+                    </div>
+                    <span class="small fw-semibold text-nowrap" th:text="${@india.currency(category.value)}">₹0.00</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card p-3 p-md-4 mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <h2 class="section-title mb-1">Resolution actions</h2>
+                <p class="small text-muted mb-0">Choose an available next step for surplus stock.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a th:href="@{/seller/listings/create}" class="btn btn-primary btn-sm"><i class="bi bi-shop me-1"></i>List for liquidation</a>
+                <a th:if="${oldestActiveListing != null}" th:href="@{'/seller/listings/edit/' + ${oldestActiveListing.id}}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil me-1"></i>Review asking price</a>
+                <a th:href="@{/seller/offers}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chat-square-text me-1"></i>Review buyer offers</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="row g-3 mb-4">
+        <div class="col-lg-8">
+            <div class="card h-100" id="listing-table">
+                <div class="d-flex justify-content-between align-items-center gap-2 p-3 p-md-4 pb-2">
+                    <div>
+                        <h2 class="section-title mb-1">Dead stock inventory</h2>
+                        <p class="small text-muted mb-0">Search and review your active marketplace listings.</p>
+                    </div>
+                    <span class="small text-muted text-nowrap" th:text="${activeListingCount + ' active'}">0 active</span>
+                </div>
+
+                <div th:if="${activeListings.empty}" class="empty-state">
+                    <div class="stat-icon mx-auto mb-3 text-muted" style="background:#f1f5f9"><i class="bi bi-inbox"></i></div>
+                    <h3 class="h6 fw-semibold">No listings yet</h3>
+                    <p class="small text-muted mb-3">Add surplus stock to make it visible to verified business buyers.</p>
+                    <a th:href="@{/seller/listings/create}" class="btn btn-primary btn-sm">Create your first listing</a>
+                </div>
+
+                <div th:unless="${activeListings.empty}" class="inventory-filters px-3 px-md-4 pt-3">
+                    <label class="visually-hidden" for="inventorySearch">Search your inventory</label>
+                    <input id="inventorySearch" class="form-control form-control-sm" type="search" placeholder="Search product">
+                    <label class="visually-hidden" for="categoryFilter">Filter by category</label>
+                    <select id="categoryFilter" class="form-select form-select-sm">
+                        <option value="">All categories</option>
+                        <option th:each="category : ${listingCategories}" th:value="${category}" th:text="${category}">Category</option>
+                    </select>
+                    <label class="visually-hidden" for="listingAgeFilter">Filter by listing age</label>
+                    <select id="listingAgeFilter" class="form-select form-select-sm">
+                        <option value="">Any listing age</option>
+                        <option value="30">30+ days listed</option>
+                        <option value="60">60+ days listed</option>
+                        <option value="90">90+ days listed</option>
+                    </select>
+                    <label class="visually-hidden" for="listingStatusFilter">Filter by listing status</label>
+                    <select id="listingStatusFilter" class="form-select form-select-sm">
+                        <option value="">All statuses</option>
+                        <option value="AVAILABLE">Available</option>
+                        <option value="UNDER_NEGOTIATION">Under negotiation</option>
+                    </select>
+                    <label class="visually-hidden" for="locationFilter">Filter by storage location</label>
+                    <select id="locationFilter" class="form-select form-select-sm">
+                        <option value="">All locations</option>
+                        <option th:each="location : ${listingLocations}" th:value="${location}" th:text="${location}">Location</option>
+                    </select>
+                    <label class="visually-hidden" for="valuationFilter">Filter by purchase value</label>
+                    <select id="valuationFilter" class="form-select form-select-sm">
+                        <option value="">Any purchase value</option>
+                        <option value="under-50000">Under ₹50,000</option>
+                        <option value="50000-200000">₹50,000–₹2,00,000</option>
+                        <option value="over-200000">Over ₹2,00,000</option>
+                    </select>
+                </div>
+
+                <div class="table-responsive" th:unless="${activeListings.empty}">
+                    <table class="table align-middle mb-0 mobile-card-table">
+                        <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Purchase value</th>
+                            <th>Asking price</th>
+                            <th>Quantity</th>
+                            <th>Location</th>
+                            <th>Days listed</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="item : ${activeListings}"
+                            th:attr="data-search=${#strings.toLowerCase(item.title)},data-category=${item.category.title},data-status=${item.status.name()},data-location=${item.location},data-age=${@india.daysListed(item.createdAt)},data-value=${item.originalPrice.doubleValue() * item.quantity}">
+                            <td data-label="Product">
+                                <div class="d-flex align-items-center gap-2">
+                                    <img th:src="${item.imageUrl != null and !item.imageUrl.isEmpty() ? item.imageUrl : 'https://placehold.co/80x80/f1f5f9/64748b?text=Stock'}" th:alt="${item.title}" class="rounded-2" style="width:42px;height:42px;object-fit:cover">
+                                    <div class="min-w-0">
+                                        <a th:href="@{'/listings/' + ${item.id}}" class="fw-semibold text-dark text-decoration-none" th:text="${item.title}">Product</a>
+                                        <div class="small text-muted" th:text="${item.category.title}">Category</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td data-label="Purchase value" class="text-nowrap" th:text="${@india.stockValue(item.originalPrice, item.quantity)}">₹0.00</td>
+                            <td data-label="Asking price" class="fw-semibold text-nowrap" th:text="${@india.currency(item.price)}">₹0.00</td>
+                            <td data-label="Quantity" class="text-nowrap" th:text="${item.quantity + ' ' + item.unit}">0 units</td>
+                            <td data-label="Location" th:text="${item.location}">City, State</td>
+                            <td data-label="Days listed" class="text-nowrap" th:text="${@india.daysListed(item.createdAt) + ' days'}">0 days</td>
+                            <td data-label="Status"><span class="badge" th:classappend="${'badge-status-' + item.status.name()}" th:text="${#strings.replace(item.status.name(), '_', ' ')}">Available</span></td>
+                            <td data-label="Actions" class="text-end text-nowrap">
+                                <a th:href="@{'/listings/' + ${item.id}}" class="btn btn-sm btn-light" aria-label="View listing"><i class="bi bi-eye"></i></a>
+                                <a th:href="@{'/seller/listings/edit/' + ${item.id}}" class="btn btn-sm btn-light" aria-label="Edit listing"><i class="bi bi-pencil"></i></a>
+                                <form th:action="@{'/seller/listings/delete/' + ${item.id}}" method="post" class="d-inline" onsubmit="return confirm('Remove this listing?');">
+                                    <button type="submit" class="btn btn-sm btn-light text-danger" aria-label="Remove listing"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        <tr class="inventory-empty-row d-none"><td colspan="8" class="text-center text-muted py-4">No listings match these filters.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <aside class="col-lg-4">
+            <section class="card h-100 p-3 p-md-4">
+                <h2 class="section-title mb-1">Needs your attention</h2>
+                <p class="small text-muted mb-3">Keep buyer conversations moving.</p>
+                <div th:if="${pendingOfferCount > 0}" class="attention-item">
+                    <span class="attention-icon"><i class="bi bi-chat-square-text"></i></span>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold" th:text="${pendingOfferCount + ' buyer offers need a response'}">Offers need a response</div>
+                        <a th:href="@{/seller/offers}" class="small text-decoration-none">Review and negotiate</a>
+                    </div>
+                </div>
+                <div th:if="${pendingOfferCount == 0}" class="attention-item">
+                    <span class="attention-icon"><i class="bi bi-check2-circle"></i></span>
+                    <div>
+                        <div class="fw-semibold">You’re all caught up</div>
+                        <div class="small text-muted">New buyer offers will appear here.</div>
+                    </div>
+                </div>
+                <hr class="my-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="small text-muted">Business verification</span>
+                    <span class="badge bg-light text-dark border" th:if="${currentUser != null and currentUser.businessProfile != null}" th:text="${currentUser.businessProfile.verificationStatus}">PENDING</span>
+                </div>
+                <a th:href="@{/profile}" class="small text-decoration-none mt-2">Manage business profile <i class="bi bi-arrow-right"></i></a>
+            </section>
+        </aside>
+    </section>
+</main>
+
+<div th:replace="~{layout/base :: footer}"></div>
+<div th:replace="~{layout/base :: scripts}"></div>
+<script>
+    (() => {
+        const search = document.getElementById('inventorySearch');
+        const category = document.getElementById('categoryFilter');
+        const age = document.getElementById('listingAgeFilter');
+        const status = document.getElementById('listingStatusFilter');
+        const location = document.getElementById('locationFilter');
+        const valuation = document.getElementById('valuationFilter');
+        const rows = Array.from(document.querySelectorAll('#listing-table tbody tr[data-search]'));
+        const emptyRow = document.querySelector('#listing-table .inventory-empty-row');
+        if (!search || !category || !age || !status || !location || !valuation || !emptyRow) return;
+
+        const applyFilters = () => {
+            const query = search.value.trim().toLowerCase();
+            let visibleCount = 0;
+            rows.forEach((row) => {
+                const value = Number(row.dataset.value);
+                const valuationMatch = !valuation.value
+                    || (valuation.value === 'under-50000' && value < 50000)
+                    || (valuation.value === '50000-200000' && value >= 50000 && value <= 200000)
+                    || (valuation.value === 'over-200000' && value > 200000);
+                const matches = row.dataset.search.includes(query)
+                    && (!category.value || row.dataset.category === category.value)
+                    && (!age.value || Number(row.dataset.age) >= Number(age.value))
+                    && (!status.value || row.dataset.status === status.value)
+                    && (!location.value || row.dataset.location === location.value)
+                    && valuationMatch;
+                row.classList.toggle('d-none', !matches);
+                if (matches) visibleCount += 1;
+            });
+            emptyRow.classList.toggle('d-none', visibleCount !== 0);
+        };
+
+        [search, category, age, status, location, valuation].forEach((control) => {
+            control.addEventListener('input', applyFilters);
+            control.addEventListener('change', applyFilters);
+        });
+    })();
+</script>
+</body>
+</html>

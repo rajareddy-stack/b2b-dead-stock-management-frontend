@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout/base :: head('Admin Console')}"></head>
+<body class="bg-light">
+
+<div th:replace="~{layout/base :: navbar}"></div>
+<div th:replace="~{layout/base :: alerts}"></div>
+
+<div class="container-fluid px-lg-5 py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="bi bi-shield-check text-danger me-2"></i>Admin Console &amp; Analytics</h2>
+            <p class="text-muted small mb-0">Platform oversight, business identity verification, listing moderation, and B2B transaction metrics</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a th:href="@{/swagger-ui.html}" target="_blank" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-code-slash me-1"></i> Swagger API Docs
+            </a>
+            <a th:href="@{/h2-console}" target="_blank" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-database me-1"></i> Database Console
+            </a>
+        </div>
+    </div>
+
+    <!-- Analytics KPI Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card stat-card p-3 h-100 border-start border-4 border-primary">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted small fw-semibold">TOTAL USERS</span>
+                        <h3 class="fw-bold my-1 text-dark" th:text="${stats.totalUsers}">0</h3>
+                        <small class="text-muted">
+                            <span class="text-warning fw-bold" th:text="${stats.totalSellers}">0</span> Sellers | 
+                            <span class="text-info fw-bold" th:text="${stats.totalBuyers}">0</span> Buyers
+                        </small>
+                    </div>
+                    <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                        <i class="bi bi-people"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card stat-card p-3 h-100 border-start border-4 border-success">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted small fw-semibold">ACTIVE SURPLUS VALUE</span>
+                        <h3 class="fw-bold my-1 text-success" th:text="${@india.currency(stats.totalActiveSurplusValue)}">₹0.00</h3>
+                        <small class="text-muted"><span class="fw-bold text-dark" th:text="${stats.totalListings}">0</span> active listings</small>
+                    </div>
+                    <div class="stat-icon bg-success bg-opacity-10 text-success">
+                        <i class="bi bi-currency-dollar"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card stat-card p-3 h-100 border-start border-4 border-info">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted small fw-semibold">CONFIRMED DEALS VOLUME</span>
+                        <h3 class="fw-bold my-1 text-info" th:text="${@india.currency(stats.totalAcceptedDealVolume)}">₹0.00</h3>
+                        <small class="text-muted"><span class="fw-bold text-dark" th:text="${stats.acceptedDealsCount}">0</span> completed negotiations</small>
+                    </div>
+                    <div class="stat-icon bg-info bg-opacity-10 text-info">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card stat-card p-3 h-100 border-start border-4 border-warning">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted small fw-semibold">PENDING VERIFICATIONS</span>
+                        <h3 class="fw-bold my-1 text-warning" th:text="${stats.pendingVerifications}">0</h3>
+                        <small class="text-muted">Awaiting admin compliance review</small>
+                    </div>
+                    <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                        <i class="bi bi-shield-exclamation"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 1: Business Verifications -->
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h5 class="fw-bold mb-0"><i class="bi bi-building-check text-primary me-2"></i>Business Accounts &amp; Verification Review</h5>
+                <small class="text-muted">Verify tax IDs, operational addresses, and industry compliance</small>
+            </div>
+            <span class="badge bg-light text-dark border px-3 py-2" th:text="${businesses.size() + ' Total Businesses'}">0</span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light text-muted small">
+                    <tr>
+                        <th>Company</th>
+                        <th>Tax ID (GST/TIN)</th>
+                        <th>Role</th>
+                        <th>Location</th>
+                        <th>Phone</th>
+                        <th>Verification Status</th>
+                        <th class="text-end">Verification Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="b : ${businesses}">
+                        <td>
+                            <div class="fw-bold text-dark" th:text="${b.companyName}">Company Name</div>
+                            <small class="text-muted" th:text="${b.user.email}">user@email.com</small>
+                        </td>
+                        <td><code class="fw-bold" th:text="${b.taxId}">GST-123</code></td>
+                        <td>
+                            <span class="badge badge-role" 
+                                  th:classappend="${b.user.role.name() == 'SELLER' ? 'bg-warning text-dark' : (b.user.role.name() == 'BUYER' ? 'bg-info text-dark' : 'bg-danger')}"
+                                  th:text="${b.user.role}">ROLE</span>
+                        </td>
+                        <td><span class="small" th:text="${b.city + ', ' + b.state}">City, State</span></td>
+                        <td><span class="small" th:text="${b.phone}">Phone</span></td>
+                        <td>
+                            <span class="badge" th:classappend="${'badge-status-' + b.verificationStatus.name()}" th:text="${b.verificationStatus}">PENDING</span>
+                        </td>
+                        <td class="text-end">
+                            <div th:if="${b.verificationStatus.name() == 'PENDING'}" class="btn-group btn-group-sm">
+                                <form th:action="@{'/admin/businesses/verify/' + ${b.id}}" method="post" class="d-inline">
+                                    <button type="submit" class="btn btn-success btn-sm fw-semibold">
+                                        <i class="bi bi-check-lg me-1"></i> Approve
+                                    </button>
+                                </form>
+                                <form th:action="@{'/admin/businesses/reject/' + ${b.id}}" method="post" class="d-inline">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                                        <i class="bi bi-x-lg me-1"></i> Reject
+                                    </button>
+                                </form>
+                            </div>
+                            <div th:unless="${b.verificationStatus.name() == 'PENDING'}">
+                                <span class="small text-muted"><i class="bi bi-check2 text-success me-1"></i>Reviewed</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Section 2: Listings Moderation -->
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h5 class="fw-bold mb-0"><i class="bi bi-boxes text-primary me-2"></i>Listing Moderation Queue</h5>
+                <small class="text-muted">Inspect dead stock inventory descriptions, photos, and compliance</small>
+            </div>
+            <span class="badge bg-light text-dark border px-3 py-2" th:text="${listings.size() + ' Total Listings'}">0</span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light text-muted small">
+                    <tr>
+                        <th>Item Title</th>
+                        <th>Seller</th>
+                        <th>Category</th>
+                        <th>Price</th>
+                        <th>Quantity</th>
+                        <th>Location</th>
+                        <th>Status</th>
+                        <th class="text-end">Moderation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="item : ${listings}">
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <img th:src="${item.imageUrl}" th:alt="${item.title}" class="rounded-2" style="width: 40px; height: 40px; object-fit: cover;">
+                                <div>
+                                    <a th:href="@{'/listings/' + ${item.id}}" class="fw-semibold text-dark text-decoration-none" th:text="${item.title}">Title</a>
+                                    <div class="small text-muted" th:text="${item.condition.displayName}">Condition</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="small fw-semibold" th:text="${item.seller.businessProfile != null ? item.seller.businessProfile.companyName : item.seller.fullName}">Seller</div>
+                        </td>
+                        <td><span class="small badge bg-light text-dark border" th:text="${item.category.title}">Category</span></td>
+                        <td><span class="fw-bold text-success" th:text="${@india.currency(item.price)}">₹0.00</span></td>
+                        <td><span class="small" th:text="${item.quantity + ' ' + item.unit}">10 Units</span></td>
+                        <td><span class="small" th:text="${item.location}">Location</span></td>
+                        <td>
+                            <span class="badge" th:classappend="${'badge-status-' + item.status.name()}" th:text="${item.status}">AVAILABLE</span>
+                        </td>
+                        <td class="text-end">
+                            <form th:action="@{'/admin/listings/delete/' + ${item.id}}" method="post" class="d-inline"
+                                  onsubmit="return confirm('Moderate and remove this listing?');">
+                                <button type="submit" class="btn btn-outline-danger btn-sm" title="Remove Listing">
+                                    <i class="bi bi-trash me-1"></i> Delist
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div th:replace="~{layout/base :: footer}"></div>
+<div th:replace="~{layout/base :: scripts}"></div>
+
+</body>
+</html>

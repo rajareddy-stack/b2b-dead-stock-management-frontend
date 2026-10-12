@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout/base :: head(${listingForm.id == null ? 'Post Dead Stock Listing' : 'Edit Surplus Listing'})}"></head>
+<body class="bg-light">
+
+<div th:replace="~{layout/base :: navbar}"></div>
+<div th:replace="~{layout/base :: alerts}"></div>
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-9">
+            <div class="card border-0 shadow-sm rounded-4 p-4 p-md-5 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h3 class="fw-bold mb-1" th:text="${listingForm.id == null ? 'List Surplus / Dead Stock' : 'Edit Surplus Listing'}">List Surplus</h3>
+                        <p class="text-muted small mb-0">Publish dormant industrial inventory for immediate liquidation</p>
+                    </div>
+                    <a th:href="@{/seller/dashboard}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+                    </a>
+                </div>
+
+                <form th:action="${listingForm.id == null ? '/seller/listings/create' : '/seller/listings/edit/' + listingForm.id}" 
+                      th:object="${listingForm}" method="post">
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-12">
+                            <label class="form-label small fw-semibold">Listing Title</label>
+                            <input type="text" th:field="*{title}" class="form-control" 
+                                   placeholder="e.g. Surplus Structural Steel I-Beams (W12x26 - 30ft Lengths)" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('title')}" th:errors="*{title}"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Industry Category</label>
+                            <select th:field="*{categoryId}" class="form-select" required>
+                                <option value="">-- Select Category --</option>
+                                <option th:each="cat : ${categories}" th:value="${cat.id}" th:text="${cat.title}">Category</option>
+                            </select>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('categoryId')}" th:errors="*{categoryId}"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Item Condition</label>
+                            <select th:field="*{condition}" class="form-select" required>
+                                <option th:each="c : ${T(com.deadstock.marketplace.model.enums.ItemCondition).values()}" 
+                                        th:value="${c}" th:text="${c.displayName}">Condition</option>
+                            </select>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('condition')}" th:errors="*{condition}"></div>
+                        </div>
+
+                        <div class="col-md-12">
+                            <label class="form-label small fw-semibold">Item Specs &amp; Condition Details</label>
+                            <textarea th:field="*{description}" class="form-control" rows="4" 
+                                      placeholder="Provide technical specifications, packaging, storage condition, certifications, reason for surplus liquidation..."></textarea>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('description')}" th:errors="*{description}"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Purchase cost (₹ per unit)</label>
+                            <input type="number" step="0.01" min="0.01" th:field="*{originalPrice}" class="form-control" placeholder="Original price" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('originalPrice')}" th:errors="*{originalPrice}"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Asking price (₹ per unit)</label>
+                            <input type="number" step="0.01" min="0.01" th:field="*{price}" class="form-control" placeholder="Target liquidation price" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('price')}" th:errors="*{price}"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Available Quantity</label>
+                            <input type="number" min="1" th:field="*{quantity}" class="form-control" placeholder="e.g. 50" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('quantity')}" th:errors="*{quantity}"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Unit of measurement</label>
+                            <input type="text" th:field="*{unit}" class="form-control" placeholder="e.g. pieces, boxes, cartons, kg, litres" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('unit')}" th:errors="*{unit}"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Warehouse city, state and PIN code</label>
+                            <input type="text" th:field="*{location}" class="form-control" placeholder="e.g. Peenya, Bengaluru, Karnataka 560058" required>
+                            <div class="text-danger small" th:if="${#fields.hasErrors('location')}" th:errors="*{location}"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Image URL (Optional photo / catalog link)</label>
+                            <input type="url" th:field="*{imageUrl}" class="form-control" placeholder="https://example.com/item.jpg">
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a th:href="@{/seller/dashboard}" class="btn btn-light px-4">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-5 fw-semibold">
+                            <i class="bi bi-cloud-arrow-up me-1"></i> <span th:text="${listingForm.id == null ? 'Publish Surplus Listing' : 'Save Changes'}">Publish</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div th:replace="~{layout/base :: footer}"></div>
+<div th:replace="~{layout/base :: scripts}"></div>
+
+</body>
+</html>

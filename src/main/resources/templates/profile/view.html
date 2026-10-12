@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout/base :: head('Business Profile &amp; Verification')}"></head>
+<body class="bg-light">
+
+<div th:replace="~{layout/base :: navbar}"></div>
+<div th:replace="~{layout/base :: alerts}"></div>
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm rounded-4 p-4 p-md-5 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h3 class="fw-bold mb-1">Company Profile &amp; Credentials</h3>
+                        <p class="text-muted small mb-0">Manage verified commercial credentials and contact details</p>
+                    </div>
+                    <div>
+                        <span class="badge fs-6 px-3 py-2" 
+                              th:if="${profile != null}"
+                              th:classappend="${profile.verificationStatus.name() == 'APPROVED' ? 'bg-success' : (profile.verificationStatus.name() == 'PENDING' ? 'bg-warning text-dark' : 'bg-danger')}">
+                            <i class="bi bi-patch-check-fill me-1" th:if="${profile.verificationStatus.name() == 'APPROVED'}"></i>
+                            <span th:text="${profile.verificationStatus}">VERIFIED</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div th:if="${profile != null and profile.verificationStatus.name() == 'PENDING'}" class="alert alert-warning small mb-4">
+                    <i class="bi bi-info-circle-fill me-1"></i> Your business account is currently undergoing admin identity verification. You can still browse and list surplus inventory.
+                </div>
+
+                <form th:action="@{/profile/edit}" method="post">
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Company Name</label>
+                            <input type="text" name="companyName" class="form-control" th:value="${profile != null ? profile.companyName : ''}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">GSTIN or business registration ID</label>
+                            <input type="text" name="taxId" class="form-control" th:value="${profile != null ? profile.taxId : ''}" required>
+                            <div class="form-text">GST registration is not assumed; use your applicable business ID.</div>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label small fw-semibold">Physical / Warehouse Address</label>
+                            <input type="text" name="address" class="form-control" th:value="${profile != null ? profile.address : ''}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">City</label>
+                            <input type="text" name="city" class="form-control" th:value="${profile != null ? profile.city : ''}" autocomplete="address-level2" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">State</label>
+                            <input type="text" name="state" class="form-control" th:value="${profile != null ? profile.state : ''}" autocomplete="address-level1" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">PIN code</label>
+                            <input type="text" name="postalCode" class="form-control" th:value="${profile != null ? profile.postalCode : ''}" placeholder="PIN code" inputmode="numeric" autocomplete="postal-code">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Phone Number</label>
+                            <input type="tel" name="phone" class="form-control" th:value="${profile != null ? profile.phone : ''}" placeholder="+91 98765 43210" autocomplete="tel" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Industry Sector</label>
+                            <input type="text" name="industryType" class="form-control" th:value="${profile != null ? profile.industryType : ''}" required>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary fw-semibold px-4">
+                            <i class="bi bi-save me-1"></i> Update Business Profile
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div th:replace="~{layout/base :: footer}"></div>
+<div th:replace="~{layout/base :: scripts}"></div>
+
+</body>
+</html>

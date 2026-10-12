@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout/base :: head('Incoming Offers &amp; Negotiations')}"></head>
+<body>
+
+<div th:replace="~{layout/base :: navbar}"></div>
+<div th:replace="~{layout/base :: alerts}"></div>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">Incoming Purchase Offers</h2>
+            <p class="text-muted small mb-0">Dynamic B2B price negotiations from buyers seeking your surplus stock</p>
+        </div>
+        <a th:href="@{/seller/dashboard}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+        </a>
+    </div>
+
+    <!-- Empty state -->
+    <div th:if="${incomingOffers.empty}" class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white">
+        <div class="stat-icon bg-light text-muted mx-auto mb-3">
+            <i class="bi bi-chat-left-dots fs-3"></i>
+        </div>
+        <h5 class="fw-bold">No Incoming Offers Yet</h5>
+        <p class="text-muted small mb-0">When buyers make purchase proposals on your surplus inventory, they will appear here for review.</p>
+    </div>
+
+    <!-- Offers Table -->
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white" th:unless="${incomingOffers.empty}">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light text-muted small">
+                    <tr>
+                        <th>Listing</th>
+                        <th>Buyer Company</th>
+                        <th>Offered Price</th>
+                        <th>Quantity Desired</th>
+                        <th>Total Value</th>
+                        <th>Status</th>
+                        <th>Buyer Notes</th>
+                        <th class="text-end">Negotiation Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="offer : ${incomingOffers}">
+                        <td>
+                            <a th:href="@{'/listings/' + ${offer.listing.id}}" class="fw-bold text-dark text-decoration-none" th:text="${offer.listing.title}">Listing Title</a>
+                            <div class="small text-muted" th:text="${'Listed at: ' + @india.currency(offer.listing.price) + '/' + offer.listing.unit}">Listed at ₹10.00</div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold text-dark" th:text="${offer.buyer.businessProfile != null ? offer.buyer.businessProfile.companyName : offer.buyer.fullName}">Buyer Co</div>
+                            <small class="text-muted" th:text="${offer.buyer.email}">buyer@email.com</small>
+                        </td>
+                        <td>
+                            <div class="fw-bold text-primary" th:text="${@india.currency(offer.offerPrice)}">₹10,000.00</div>
+                            <small th:if="${offer.counterPrice != null}" class="text-info d-block">
+                                Counter: <span th:text="${@india.currency(offer.counterPrice)}">₹11,000.00</span>
+                            </small>
+                        </td>
+                        <td class="fw-semibold" th:text="${offer.quantity + ' ' + offer.listing.unit}">20 Tons</td>
+                        <td class="fw-bold text-success" th:text="${@india.currency(offer.getTotalAmount())}">₹2,00,000.00</td>
+                        <td>
+                            <span class="badge" th:classappend="${'badge-status-' + offer.status.name()}" th:text="${offer.status}">PENDING</span>
+                        </td>
+                        <td>
+                            <small class="text-muted" th:text="${offer.buyerMessage != null ? offer.buyerMessage : 'None'}">Note</small>
+                        </td>
+                        <td class="text-end">
+                            <!-- If Pending or Countered -->
+                            <div th:if="${offer.status.name() == 'PENDING' or offer.status.name() == 'COUNTER_OFFERED'}" class="d-flex gap-1 justify-content-end">
+                                <!-- Accept Button -->
+                                <form th:action="@{'/seller/offers/accept/' + ${offer.id}}" method="post" class="d-inline"
+                                      onsubmit="return confirm('Accept this deal? This will confirm the sale.');">
+                                    <button type="submit" class="btn btn-success btn-sm fw-semibold" title="Accept Deal">
+                                        <i class="bi bi-check-lg me-1"></i> Accept
+                                    </button>
+                                </form>
+
+                                <!-- Counter-Offer Trigger Modal -->
+                                <button type="button" class="btn btn-primary btn-sm fw-semibold" 
+                                        data-bs-toggle="modal" 
+                                        th:data-bs-target="${'#counterModal' + offer.id}">
+                                    <i class="bi bi-arrow-left-right me-1"></i> Counter
+                                </button>
+
+                                <!-- Reject Button -->
+                                <form th:action="@{'/seller/offers/reject/' + ${offer.id}}" method="post" class="d-inline"
+                                      onsubmit="return confirm('Decline this offer?');">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="Decline Offer">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- If already resolved -->
+                            <div th:if="${offer.status.name() == 'ACCEPTED'}">
+                                <span class="badge bg-success-subtle text-success border border-success px-2 py-1"><i class="bi bi-check-circle me-1"></i> Deal Confirmed</span>
+                            </div>
+                            <div th:if="${offer.status.name() == 'REJECTED'}">
+                                <span class="badge bg-danger-subtle text-danger border border-danger px-2 py-1"><i class="bi bi-x-circle me-1"></i> Declined</span>
+                            </div>
+
+                            <!-- Counter Modal for this specific offer -->
+                            <div class="modal fade" th:id="${'counterModal' + offer.id}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content rounded-4 border-0 shadow text-start">
+                                        <div class="modal-header border-bottom-0">
+                                            <h5 class="modal-title fw-bold">Propose Counter-Offer Price</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <form th:action="@{'/seller/offers/counter/' + ${offer.id}}" method="post">
+                                            <div class="modal-body pt-0">
+                                                <p class="small text-muted mb-3">
+                                                    Buyer's Current Offer: <strong class="text-primary" th:text="${@india.currency(offer.offerPrice)}">₹0.00</strong> per unit.
+                                                </p>
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold">Your Counter Price (₹ / unit)</label>
+                                                    <input type="number" step="0.01" min="1" name="counterPrice" class="form-control" 
+                                                           th:value="${offer.counterPrice != null ? offer.counterPrice : offer.listing.price}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold">Note to Buyer</label>
+                                                    <textarea name="sellerMessage" class="form-control" rows="3" 
+                                                              placeholder="Explain conditions, schedule constraints, or minimum lot pricing..."></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer border-top-0">
+                                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-primary fw-semibold px-4">Submit Counter-Offer</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div th:replace="~{layout/base :: footer}"></div>
+<div th:replace="~{layout/base :: scripts}"></div>
+
+</body>
+</html>

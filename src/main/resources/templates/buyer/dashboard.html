@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout/base :: head('Buyer Central - My Purchase Offers')}"></head>
+<body>
+
+<div th:replace="~{layout/base :: navbar}"></div>
+<div th:replace="~{layout/base :: alerts}"></div>
+
+<div class="container py-4">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h2 class="fw-bold mb-1">Buyer Central &amp; Deal Tracking</h2>
+            <p class="text-muted small mb-0">Track your surplus inventory purchase proposals, counter-offers, and confirmed orders</p>
+        </div>
+        <a th:href="@{/browse}" class="btn btn-primary fw-semibold">
+            <i class="bi bi-search me-1"></i> Browse More Dead Stock
+        </a>
+    </div>
+
+    <!-- KPI Summary Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card stat-card p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon bg-info bg-opacity-10 text-info">
+                        <i class="bi bi-arrow-left-right"></i>
+                    </div>
+                    <div>
+                        <h4 class="fw-bold mb-0" th:text="${myOffers.size()}">0</h4>
+                        <span class="text-muted small">Total Submitted Offers</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stat-card p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon bg-success bg-opacity-10 text-success">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                    <div>
+                        <h4 class="fw-bold mb-0" th:text="${acceptedOfferCount}">0</h4>
+                        <span class="text-muted small">Confirmed Deals</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stat-card p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                        <i class="bi bi-patch-check"></i>
+                    </div>
+                    <div>
+                        <h4 class="fw-bold mb-0" th:if="${currentUser != null and currentUser.businessProfile != null}" 
+                            th:text="${currentUser.businessProfile.verificationStatus}">APPROVED</h4>
+                        <span class="text-muted small">Business Verification</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Offers List -->
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0"><i class="bi bi-briefcase text-primary me-2"></i>My Negotiation Pipeline</h5>
+            <span class="text-muted small" th:text="${myOffers.size() + ' Offers'}">0 Offers</span>
+        </div>
+
+        <div th:if="${myOffers.empty}" class="text-center py-5">
+            <div class="stat-icon bg-light text-muted mx-auto mb-3">
+                <i class="bi bi-inbox fs-3"></i>
+            </div>
+            <h6 class="fw-bold">No Active Offers Yet</h6>
+            <p class="text-muted small mb-3">Browse available industrial surplus and submit cost-effective purchase offers.</p>
+            <a th:href="@{/browse}" class="btn btn-primary btn-sm">Explore Dead Stock</a>
+        </div>
+
+        <div class="table-responsive" th:unless="${myOffers.empty}">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light text-muted small">
+                    <tr>
+                        <th>Item</th>
+                        <th>Seller Business</th>
+                        <th>Your Offer</th>
+                        <th>Quantity</th>
+                        <th>Seller Response / Counter</th>
+                        <th>Deal Status</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="offer : ${myOffers}">
+                        <td>
+                            <div class="d-flex align-items-center gap-3">
+                                <img th:src="${offer.listing.imageUrl}" th:alt="${offer.listing.title}" class="rounded-3" style="width: 48px; height: 48px; object-fit: cover;">
+                                <div>
+                                    <a th:href="@{'/listings/' + ${offer.listing.id}}" class="fw-bold text-dark text-decoration-none" th:text="${offer.listing.title}">Listing Title</a>
+                                    <div class="small text-muted"><i class="bi bi-geo-alt me-1"></i><span th:text="${offer.listing.location}">Location</span></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold text-dark" th:text="${offer.listing.seller.businessProfile != null ? offer.listing.seller.businessProfile.companyName : offer.listing.seller.fullName}">Seller Co</div>
+                            <small class="text-muted" th:text="${offer.listing.seller.email}">seller@mail.com</small>
+                        </td>
+                        <td>
+                            <div class="fw-bold text-primary" th:text="${@india.currency(offer.offerPrice)}">₹10,000.00</div>
+                            <small class="text-muted" th:text="${'Total: ' + @india.stockValue(offer.offerPrice, offer.quantity)}">Total</small>
+                        </td>
+                        <td class="fw-semibold" th:text="${offer.quantity + ' ' + offer.listing.unit}">20 Tons</td>
+                        <td>
+                            <!-- If Counter-Offered -->
+                            <div th:if="${offer.counterPrice != null}">
+                                <div class="fw-bold text-danger">
+                                    Counter: <span th:text="${@india.currency(offer.counterPrice)}">₹11,200.00</span>
+                                </div>
+                                <small class="text-muted d-block" th:if="${offer.sellerMessage != null}" th:text="${offer.sellerMessage}">Seller note</small>
+                            </div>
+                            <div th:unless="${offer.counterPrice != null}">
+                                <span class="text-muted small">No counter proposed yet</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge" th:classappend="${'badge-status-' + offer.status.name()}" th:text="${offer.status}">PENDING</span>
+                        </td>
+                        <td class="text-end">
+                            <!-- If Countered, Buyer can accept or decline counter -->
+                            <div th:if="${offer.status.name() == 'COUNTER_OFFERED'}" class="d-flex gap-1 justify-content-end">
+                                <form th:action="@{'/buyer/offers/accept/' + ${offer.id}}" method="post" class="d-inline"
+                                      onsubmit="return confirm('Accept this counter-offer? Deal will be confirmed.');">
+                                    <button type="submit" class="btn btn-success btn-sm fw-semibold">
+                                        <i class="bi bi-check-lg me-1"></i> Accept Counter
+                                    </button>
+                                </form>
+                                <form th:action="@{'/buyer/offers/reject/' + ${offer.id}}" method="post" class="d-inline"
+                                      onsubmit="return confirm('Decline this counter-offer?');">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                                        <i class="bi bi-x-lg"></i> Decline
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- If Accepted -->
+                            <div th:if="${offer.status.name() == 'ACCEPTED'}">
+                                <span class="badge bg-success text-white px-2 py-1"><i class="bi bi-check2-all me-1"></i> Deal Agreed</span>
+                            </div>
+
+                            <!-- If Pending -->
+                            <div th:if="${offer.status.name() == 'PENDING'}">
+                                <span class="badge bg-light text-muted border"><i class="bi bi-clock me-1"></i> Awaiting Seller</span>
+                            </div>
+
+                            <!-- If Rejected -->
+                            <div th:if="${offer.status.name() == 'REJECTED'}">
+                                <span class="badge bg-secondary text-white"><i class="bi bi-slash-circle me-1"></i> Closed</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div th:replace="~{layout/base :: footer}"></div>
+<div th:replace="~{layout/base :: scripts}"></div>
+
+</body>
+</html>
