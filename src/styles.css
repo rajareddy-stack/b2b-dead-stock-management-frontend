@@ -155,6 +155,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .detail-description { margin-top: 15px; }
 .detail-labels, .price-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .tag { display: inline-flex; padding: 5px 9px; color: var(--teal); background: var(--wash); border-radius: 20px; font-size: 12px; font-weight: 700; }
+.listing-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+.listing-report { margin-top: 12px; padding: 14px; background: #fff; border: 1px solid var(--line); border-radius: 10px; }
 .status { display: inline-block; padding: 4px 8px; color: #475569; background: #f1f5f9; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .status.AVAILABLE, .status.APPROVED, .status.ACCEPTED { color: #166534; background: #dcfce7; }
 .status.PENDING, .status.COUNTER_OFFERED, .status.UNDER_NEGOTIATION { color: #92400e; background: #fef3c7; }

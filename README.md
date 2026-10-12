@@ -1,6 +1,6 @@
 # Frontend
 
-The Vite + React single-page application for the B2B Dead Stock marketplace. It supports public browsing, buyer and seller workflows, business profiles, notifications, and admin tools.
+The Vite + React single-page application for the B2B Dead Stock marketplace. It supports city/state and category search, tagged surplus listings, buyer purchase history, seller offer negotiation, business profiles, listing reports, notifications, and admin moderation tools.
 
 ## Local development
 

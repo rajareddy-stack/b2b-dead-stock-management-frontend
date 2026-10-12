@@ -157,6 +157,7 @@ function ListingCard({ listing }) {
         <div className="listing-meta"><span>{listing.category?.title}</span><span className="listing-location">⌖ {listing.location}</span></div>
         <h3><Link to={`/listings/${listing.id}`}>{listing.title}</Link></h3>
         <p className="listing-description">{listing.description}</p>
+        {listing.tags?.length > 0 && <div className="listing-tags">{listing.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>}
         <div className="listing-price-row"><div><del>{formatMoney(listing.originalPrice)}</del><strong>{formatMoney(listing.price)}</strong><small>per {listing.unit}</small></div><div className="stock-count"><strong>{listing.quantity} {listing.unit}</strong><small>Available stock</small></div></div>
         <Link className="button secondary full-width" to={`/listings/${listing.id}`}>View &amp; negotiate <span aria-hidden="true">→</span></Link>
       </div>
@@ -227,7 +228,6 @@ function BrowsePage() {
   const location = params.get("location") || "";
   const categoryId = params.get("categoryId") || "";
   const [categories, setCategories] = useState([]);
-  const [locations, setLocations] = useState([]);
   const [form, setForm] = useState({ query, location, categoryId });
   const searchQuery = new URLSearchParams();
   if (query) searchQuery.set("query", query);
@@ -238,7 +238,6 @@ function BrowsePage() {
   useEffect(() => {
     setForm({ query, location, categoryId });
     api("/api/categories").then(setCategories).catch((reason) => console.error("Could not load categories:", reason));
-    api("/api/locations").then(setLocations).catch((reason) => console.error("Could not load locations:", reason));
   }, [query, location, categoryId]);
 
   const apply = (event) => {
@@ -257,7 +256,7 @@ function BrowsePage() {
       <aside className="filter-panel"><div className="filter-title"><h2>Filters</h2><button className="text-button" onClick={() => setParams({})}>Clear all</button></div>
         <form onSubmit={apply}>
           <label className="field-label">Keywords<input className="input" value={form.query} onChange={(e) => setForm({ ...form, query: e.target.value })} placeholder="Title, material, specs..." /></label>
-          <label className="field-label">Location<select className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}><option value="">All locations</option>{locations.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+          <label className="field-label">City or state<input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g. Pune or Maharashtra" /></label>
           <fieldset className="category-filter"><legend>Category</legend><button type="button" className={!form.categoryId ? "filter-choice selected" : "filter-choice"} onClick={() => setForm({ ...form, categoryId: "" })}>All categories</button>{categories.map((item) => <button type="button" key={item.id} className={String(item.id) === String(form.categoryId) ? "filter-choice selected" : "filter-choice"} onClick={() => setForm({ ...form, categoryId: String(item.id) })}>{item.title}</button>)}</fieldset>
           <button className="button primary full-width">Apply filters</button>
         </form>
@@ -299,15 +298,47 @@ function ListingDetailPage() {
     <div className="detail-layout">
       <section>
         <div className="detail-image"><img src={imageUrl(listing.imageUrl)} alt={listing.title} onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/listing-placeholder.svg"; }} /></div>
-        <div className="panel detail-description"><div className="detail-labels"><span className="tag">{listing.category?.title}</span><span className={`status ${listing.status}`}>{statusLabels[listing.status] || listing.status}</span></div><h1>{listing.title}</h1><p>{listing.description}</p><dl className="spec-list"><div><dt>Condition</dt><dd>{conditionLabels[listing.condition] || listing.condition}</dd></div><div><dt>Available quantity</dt><dd>{listing.quantity} {listing.unit}</dd></div><div><dt>Pickup location</dt><dd>{listing.location}</dd></div><div><dt>Listing ID</dt><dd>LOT-{listing.id}</dd></div><div><dt>Posted</dt><dd>{listing.createdAt ? new Date(listing.createdAt).toLocaleDateString("en-IN") : "—"}</dd></div></dl></div>
+        <div className="panel detail-description"><div className="detail-labels"><span className="tag">{listing.category?.title}</span><span className={`status ${listing.status}`}>{statusLabels[listing.status] || listing.status}</span></div><h1>{listing.title}</h1><p>{listing.description}</p>{listing.tags?.length > 0 && <div className="listing-tags">{listing.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>}<dl className="spec-list"><div><dt>Condition</dt><dd>{conditionLabels[listing.condition] || listing.condition}</dd></div><div><dt>Available quantity</dt><dd>{listing.quantity} {listing.unit}</dd></div><div><dt>Pickup location</dt><dd>{listing.location}</dd></div><div><dt>Listing ID</dt><dd>LOT-{listing.id}</dd></div><div><dt>Posted</dt><dd>{listing.createdAt ? new Date(listing.createdAt).toLocaleDateString("en-IN") : "—"}</dd></div></dl></div>
       </section>
       <aside>
         <div className="panel offer-panel"><div className="price-heading"><span>Surplus price</span><span className="discount-badge">{listing.discountPercentage ?? 0}% discount</span></div><div className="detail-price"><strong>{formatMoney(listing.price)}</strong><del>{formatMoney(listing.originalPrice)}</del></div><p className="muted">Per {listing.unit}. Confirm taxes and delivery terms with the seller.</p><hr />
           {listing.status !== "AVAILABLE" && listing.status !== "UNDER_NEGOTIATION" ? <p className="notice info">This listing is no longer available.</p> : user?.role === "BUYER" ? <form onSubmit={makeOffer} className="stack-form"><h2>Make an offer</h2><label className="field-label">Price per {listing.unit}<input className="input" name="offerPrice" type="number" min="0.01" step="0.01" defaultValue={listing.price} required /></label><label className="field-label">Quantity (max {listing.quantity})<input className="input" name="quantity" type="number" min="1" max={listing.quantity} defaultValue={Math.min(listing.quantity, 1)} required /></label><label className="field-label">Message to seller<textarea className="input" name="buyerMessage" rows="3" maxLength="1000" placeholder="Share pickup timing or your proposal" /></label><button className="button primary full-width" disabled={busy}>{busy ? "Sending…" : "Submit purchase offer"}</button></form> : user?.role === "SELLER" ? <p className="notice info">Sign in with a buyer account to make an offer.</p> : <div><Link className="button primary full-width" to="/login">Sign in to make an offer</Link><p className="muted text-center">Verified businesses can negotiate directly.</p></div>}
         </div>
         <div className="panel seller-panel"><h2>Seller business</h2><strong>{listing.seller?.businessProfile?.companyName || listing.seller?.fullName || "Verified business"}</strong><p>{listing.seller?.businessProfile?.city ? `${listing.seller.businessProfile.city}, ${listing.seller.businessProfile.state}` : listing.location}</p></div>
+        <ListingReportAction listing={listing} user={user} onReported={(message) => setNotice(message)} />
       </aside>
     </div>
+  </div>;
+}
+
+function ListingReportAction({ listing, user, onReported }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const canReport = ["BUYER", "SELLER"].includes(user?.role) && user.id !== listing.seller?.id;
+  if (!canReport) return null;
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/api/listings/${listing.id}/reports`, { method: "POST", body: JSON.stringify({ reason }) });
+      setOpen(false);
+      setReason("");
+      onReported("Thanks. Your report has been sent to the moderation team.");
+    } catch (reason) {
+      setError(reason.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <div className="listing-report">
+    {!open ? <button className="text-button" type="button" onClick={() => setOpen(true)}>Report this listing</button> : <form className="stack-form" onSubmit={submit}>
+      <label className="field-label">Why should this listing be reviewed?<textarea className="input" value={reason} onChange={(event) => setReason(event.target.value)} maxLength="1000" rows="3" required /></label>
+      <Notice message={error} kind="error" onClose={() => setError("")} />
+      <div className="action-row"><button className="button tiny secondary" type="button" onClick={() => setOpen(false)}>Cancel</button><button className="button tiny danger" disabled={busy || !reason.trim()}>{busy ? "Sending…" : "Submit report"}</button></div>
+    </form>}
   </div>;
 }
 
@@ -375,7 +406,9 @@ function DashboardPage({ role }) {
 }
 
 function BuyerDashboard({ data, reload }) {
-  return <><div className="stats-grid dashboard-stats"><Stat label="My offers" value={data.offers.length} /><Stat label="Confirmed deals" value={data.acceptedOfferCount} /></div><h2 className="subheading">Purchase offers</h2>{data.offers.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Your offer</th><th>Quantity</th><th>Seller response</th><th>Status</th><th>Actions</th></tr></thead><tbody>{data.offers.map((offer) => <tr key={offer.id}><td><Link to={`/listings/${offer.listing.id}`}>{offer.listing.title}</Link></td><td>{offer.listing.seller?.fullName}</td><td>{formatMoney(offer.offerPrice)}<small>Total {formatMoney(offer.totalAmount)}</small></td><td>{offer.quantity} {offer.listing.unit}</td><td>{offer.counterPrice ? `${formatMoney(offer.counterPrice)} · ${offer.sellerMessage || ""}` : "—"}</td><td><Status value={offer.status} /></td><td><OfferActions offer={offer} role="BUYER" reload={reload} /></td></tr>)}</tbody></table></div> : <EmptyState title="No offers yet" text="Browse the marketplace and make an offer on a surplus listing." link="/browse" linkText="Browse listings" />}</>;
+  const purchases = data.offers.filter((offer) => offer.status === "ACCEPTED");
+  const activeOffers = data.offers.filter((offer) => offer.status !== "ACCEPTED");
+  return <><div className="stats-grid dashboard-stats"><Stat label="My offers" value={data.offers.length} /><Stat label="Confirmed deals" value={data.acceptedOfferCount} /></div><h2 className="subheading">Purchase history</h2>{purchases.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Agreed price</th><th>Quantity</th><th>Confirmed</th></tr></thead><tbody>{purchases.map((offer) => <tr key={offer.id}><td><Link to={`/listings/${offer.listing.id}`}>{offer.listing.title}</Link></td><td>{offer.listing.seller?.fullName}</td><td>{formatMoney(offer.counterPrice || offer.offerPrice)}<small>Total {formatMoney((offer.counterPrice || offer.offerPrice) * offer.quantity)}</small></td><td>{offer.quantity} {offer.listing.unit}</td><td>{offer.updatedAt ? new Date(offer.updatedAt).toLocaleDateString("en-IN") : "—"}</td></tr>)}</tbody></table></div> : <div className="empty-inline">Accepted deals will appear here.</div>}<h2 className="subheading top-space">Open and past offers</h2>{activeOffers.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Your offer</th><th>Quantity</th><th>Seller response</th><th>Status</th><th>Actions</th></tr></thead><tbody>{activeOffers.map((offer) => <tr key={offer.id}><td><Link to={`/listings/${offer.listing.id}`}>{offer.listing.title}</Link></td><td>{offer.listing.seller?.fullName}</td><td>{formatMoney(offer.offerPrice)}<small>Total {formatMoney(offer.totalAmount)}</small></td><td>{offer.quantity} {offer.listing.unit}</td><td>{offer.counterPrice ? `${formatMoney(offer.counterPrice)} · ${offer.sellerMessage || ""}` : "—"}</td><td><Status value={offer.status} /></td><td><OfferActions offer={offer} role="BUYER" reload={reload} /></td></tr>)}</tbody></table></div> : data.offers.length === 0 && <EmptyState title="No offers yet" text="Browse the marketplace and make an offer on a surplus listing." link="/browse" linkText="Browse listings" />}</>;
 }
 
 function SellerDashboard({ data, reload }) {
@@ -408,14 +441,17 @@ function AdminDashboard({ reload }) {
   const { data: stats, loading: statsLoading, error: statsError } = useLoad(() => api("/api/admin/stats"));
   const { data: businesses, loading: businessesLoading, error: businessesError, reload: reloadBusinesses } = useLoad(() => api("/api/admin/businesses"));
   const { data: listings, loading: listingsLoading, error: listingsError, reload: reloadListings } = useLoad(() => api("/api/admin/listings"));
+  const { data: reports, loading: reportsLoading, error: reportsError, reload: reloadReports } = useLoad(() => api("/api/admin/reports"));
   const [actionError, setActionError] = useState("");
   const update = async (url) => { await api(url, { method: "PUT" }); reloadBusinesses(); reload(); };
   const remove = async (id) => { await api(`/api/admin/listings/${id}`, { method: "DELETE" }); reloadListings(); };
+  const reviewReport = async (id, action) => { await api(`/api/admin/reports/${id}/${action}`, { method: "PUT" }); reloadReports(); reloadListings(); };
   const runAction = (action) => action().catch((reason) => setActionError(reason.message));
   return <><Notice message={actionError} kind="error" onClose={() => setActionError("")} /><PageState loading={statsLoading} error={statsError}><div className="stats-grid dashboard-stats"><Stat label="Businesses" value={stats.totalUsers} /><Stat label="Sellers" value={stats.totalSellers} /><Stat label="Buyers" value={stats.totalBuyers} /><Stat label="Listings" value={stats.totalListings} /><Stat label="Active surplus value" value={formatMoney(stats.totalActiveSurplusValue)} /><Stat label="Negotiations" value={stats.totalOffers} /><Stat label="Confirmed deals" value={stats.acceptedDealsCount} /><Stat label="Accepted deal volume" value={formatMoney(stats.totalAcceptedDealVolume)} /></div></PageState>
     <div className="section-heading compact top-space"><div><h2>Business verification queue</h2><p>Review submitted business profiles.</p></div><span className="tag">{stats?.pendingVerifications ?? 0} pending</span></div>
     <PageState loading={businessesLoading} error={businessesError}>{businesses?.length ? <div className="table-wrap"><table><thead><tr><th>Business</th><th>Owner</th><th>Tax ID</th><th>Location</th><th>Status</th><th>Review</th></tr></thead><tbody>{businesses.map((business) => <tr key={business.id}><td>{business.companyName}<small>{business.industryType}</small></td><td>{business.fullName}<small>{business.email}</small></td><td>{business.taxId}</td><td>{business.city}, {business.state}</td><td><Status value={business.verificationStatus} /></td><td className="action-row">{business.verificationStatus !== "APPROVED" && <button className="button tiny primary" onClick={() => runAction(() => update(`/api/admin/verify/${business.id}`))}>Approve</button>}{business.verificationStatus !== "REJECTED" && <button className="button tiny danger" onClick={() => runAction(() => update(`/api/admin/reject/${business.id}`))}>Reject</button>}</td></tr>)}</tbody></table></div> : <EmptyState title="No businesses to review" text="New business registrations will appear here." />}</PageState>
     <div className="section-heading compact top-space"><div><h2>Listing moderation</h2></div></div><PageState loading={listingsLoading} error={listingsError}>{listings?.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Category</th><th>Price</th><th>Location</th><th>Status</th><th>Moderation</th></tr></thead><tbody>{listings.map((item) => <tr key={item.id}><td><Link to={`/listings/${item.id}`}>{item.title}</Link></td><td>{item.seller?.fullName}</td><td>{item.category?.title}</td><td>{formatMoney(item.price)}</td><td>{item.location}</td><td><Status value={item.status} /></td><td><button className="button tiny danger" onClick={() => window.confirm("Remove this listing?") && runAction(() => remove(item.id))}>Remove</button></td></tr>)}</tbody></table></div> : <EmptyState title="No listings" text="Listings will appear here for moderation." />}</PageState>
+    <div className="section-heading compact top-space"><div><h2>Reported listings</h2><p>Review reports submitted by marketplace businesses.</p></div><span className="tag">{reports?.length ?? 0} pending</span></div><PageState loading={reportsLoading} error={reportsError}>{reports?.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Reported by</th><th>Reason</th><th>Reported</th><th>Review</th></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td><Link to={`/listings/${report.listing.id}`}>{report.listing.title}</Link><small>{report.listing.seller?.fullName}</small></td><td>{report.reporter.fullName}<small>{report.reporter.email}</small></td><td>{report.reason}</td><td>{report.createdAt ? new Date(report.createdAt).toLocaleDateString("en-IN") : "—"}</td><td className="action-row"><button className="button tiny secondary" onClick={() => runAction(() => reviewReport(report.id, "dismiss"))}>Dismiss</button><button className="button tiny danger" onClick={() => window.confirm("Delist this reported listing?") && runAction(() => reviewReport(report.id, "delist"))}>Delist</button></td></tr>)}</tbody></table></div> : <EmptyState title="No reports to review" text="New listing reports will appear here." />}</PageState>
   </>;
 }
 
@@ -435,6 +471,7 @@ function ListingFormPage() {
     values.originalPrice = Number(values.originalPrice);
     values.price = Number(values.price);
     values.quantity = Number(values.quantity);
+    values.tags = values.tags.split(",").map((tag) => tag.trim()).filter(Boolean);
     try {
       if (editing) await api(`/api/listings/${id}`, { method: "PUT", body: JSON.stringify(values) });
       else await api("/api/listings", { method: "POST", body: JSON.stringify(values) });
@@ -451,6 +488,7 @@ function ListingFormPage() {
     <label className="field-label">Quantity<input className="input" name="quantity" type="number" min="1" step="1" defaultValue={current?.quantity} required /></label>
     <label className="field-label">Unit<input className="input" name="unit" maxLength="30" defaultValue={current?.unit} placeholder="e.g. Tons, Pieces" required /></label>
     <label className="field-label span-two">Pickup location<input className="input" name="location" maxLength="150" defaultValue={current?.location || [user?.businessProfile?.city, user?.businessProfile?.state].filter(Boolean).join(", ")} required /></label>
+    <label className="field-label span-two">Tags <span className="muted">(up to 10, comma-separated)</span><input className="input" name="tags" defaultValue={current?.tags?.join(", ")} placeholder="e.g. recyclable, stainless steel, bulk" /></label>
     <label className="field-label span-two">Product image URL <span className="muted">(optional)</span><input className="input" name="imageUrl" type="url" defaultValue={current?.imageUrl} placeholder="https://…" /></label>
     <div className="form-actions span-two"><Link className="button secondary" to="/seller/dashboard">Cancel</Link><button className="button primary" disabled={busy}>{busy ? "Saving…" : editing ? "Save changes" : "Publish listing"}</button></div>
   </form></PageState></div></RequireRole>;
