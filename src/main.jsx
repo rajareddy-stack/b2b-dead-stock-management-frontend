@@ -1129,15 +1129,9 @@ function LoginPage() {
   const location = useLocation();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const showDemoAccess = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_ACCESS === "true";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  const autofill = (demoEmail, demoPassword) => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-  };
 
   const submit = async (event) => {
     event.preventDefault();
@@ -1167,37 +1161,6 @@ function LoginPage() {
           Access your verified commercial trading workspace
         </p>
       </div>
-
-      {showDemoAccess && (
-        <div style={{ padding: "16px", background: "var(--muted)", border: "1px solid var(--border)", marginBottom: "24px" }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", display: "block", marginBottom: "10px" }}>
-            Instant Demo Access:
-          </span>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-            <button
-              type="button"
-              className="button secondary tiny"
-              onClick={() => autofill("seller@metrosteel.com", "password123")}
-            >
-              Seller (Metro Steel)
-            </button>
-            <button
-              type="button"
-              className="button secondary tiny"
-              onClick={() => autofill("buyer@apexbuild.com", "password123")}
-            >
-              Buyer (Apex Builders)
-            </button>
-            <button
-              type="button"
-              className="button secondary tiny"
-              onClick={() => autofill("admin@deadstock.com", "password123")}
-            >
-              Admin Ops
-            </button>
-          </div>
-        </div>
-      )}
 
       <Notice message={location.state?.message} onClose={() => navigate("/login", { replace: true, state: null })} />
       <Notice message={error} kind="error" onClose={() => setError("")} />
