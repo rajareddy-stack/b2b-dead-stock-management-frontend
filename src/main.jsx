@@ -13,6 +13,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { api, conditionLabels, formatMoney, imageUrl, roleHome, statusLabels } from "./api.js";
+import { downloadCsv, parseCsv } from "./csv.js";
 import "./styles.css";
 
 const AuthContext = createContext(null);
@@ -82,7 +83,7 @@ function useLoad(loader, dependencies = []) {
 }
 
 function PageState({ loading, error, children }) {
-  if (loading) return <div className="page-state"><span className="spinner" /> Loading…</div>;
+  if (loading) return <div className="loading-skeleton-grid" aria-label="Loading content">{[0, 1, 2].map((item) => <span className="skeleton" key={item} />)}</div>;
   if (error) return <div className="page-state error-state"><strong>Could not load this page.</strong><span>{error}</span><button className="button secondary" onClick={() => window.location.reload()}>Try again</button></div>;
   return children;
 }
@@ -96,7 +97,23 @@ function Layout() {
   const { user, loading, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [theme, setTheme] = useState(() => {
+    try {
+      return window.localStorage.getItem("marketplace-theme") || "light";
+    } catch {
+      return "light";
+    }
+  });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      window.localStorage.setItem("marketplace-theme", theme);
+    } catch (error) {
+      console.error("Could not save the display theme preference:", error);
+    }
+  }, [theme]);
 
   const logout = async () => {
     try {
@@ -119,6 +136,7 @@ function Layout() {
           <button className="menu-toggle" aria-label="Toggle navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>☰</button>
           <nav className={menuOpen ? "main-nav open" : "main-nav"}>
             <NavLink to="/browse" onClick={() => setMenuOpen(false)}>Marketplace</NavLink>
+            <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>{theme === "dark" ? "☀ Light" : "◐ Dark"}</button>
             {user && <NavLink to={roleHome(user.role)} onClick={() => setMenuOpen(false)}>Dashboard</NavLink>}
             {user && <NavLink to="/profile" onClick={() => setMenuOpen(false)}>Business profile</NavLink>}
             {user && <NavLink to="/notifications" onClick={() => setMenuOpen(false)}>Notifications</NavLink>}
@@ -155,6 +173,7 @@ function ListingCard({ listing }) {
       </Link>
       <div className="listing-content">
         <div className="listing-meta"><span>{listing.category?.title}</span><span className="listing-location">⌖ {listing.location}</span></div>
+        {listing.tags?.includes("Demo sample") && <span className="demo-badge">DEMO INVENTORY</span>}
         <h3><Link to={`/listings/${listing.id}`}>{listing.title}</Link></h3>
         <p className="listing-description">{listing.description}</p>
         {listing.tags?.length > 0 && <div className="listing-tags">{listing.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>}
@@ -227,18 +246,23 @@ function BrowsePage() {
   const query = params.get("query") || "";
   const location = params.get("location") || "";
   const categoryId = params.get("categoryId") || "";
-  const [categories, setCategories] = useState([]);
-  const [form, setForm] = useState({ query, location, categoryId });
+  const discountTier = params.get("discountTier") || "";
+  const { data: loadedCategories, error: categoriesError } = useLoad(() => api("/api/categories"));
+  const categories = loadedCategories || [];
+  const [form, setForm] = useState({ query, location, categoryId, discountTier });
   const searchQuery = new URLSearchParams();
   if (query) searchQuery.set("query", query);
   if (location) searchQuery.set("location", location);
   if (categoryId) searchQuery.set("categoryId", categoryId);
-  const { data: listings, error, loading } = useLoad(() => api(`/api/listings${searchQuery.size ? `?${searchQuery}` : ""}`), [query, location, categoryId]);
+  const discountRanges = { "10-24": [10, 24], "25-49": [25, 49], "50+": [50, 100] };
+  const { data: rawListings, error, loading } = useLoad(() => api(`/api/listings${searchQuery.size ? `?${searchQuery}` : ""}`), [query, location, categoryId]);
+  const listings = discountRanges[discountTier]
+    ? (rawListings || []).filter((listing) => listing.discountPercentage >= discountRanges[discountTier][0] && listing.discountPercentage <= discountRanges[discountTier][1])
+    : rawListings;
 
   useEffect(() => {
-    setForm({ query, location, categoryId });
-    api("/api/categories").then(setCategories).catch((reason) => console.error("Could not load categories:", reason));
-  }, [query, location, categoryId]);
+    setForm({ query, location, categoryId, discountTier });
+  }, [query, location, categoryId, discountTier]);
 
   const apply = (event) => {
     event.preventDefault();
@@ -246,6 +270,7 @@ function BrowsePage() {
     if (form.query.trim()) next.set("query", form.query.trim());
     if (form.location) next.set("location", form.location);
     if (form.categoryId) next.set("categoryId", form.categoryId);
+    if (form.discountTier) next.set("discountTier", form.discountTier);
     setParams(next);
   };
 
@@ -254,9 +279,11 @@ function BrowsePage() {
     <SearchBox initialQuery={query} initialLocation={location} />
     <div className="browse-layout">
       <aside className="filter-panel"><div className="filter-title"><h2>Filters</h2><button className="text-button" onClick={() => setParams({})}>Clear all</button></div>
+        {categoriesError && <Notice message={`Could not load categories: ${categoriesError}`} kind="error" />}
         <form onSubmit={apply}>
           <label className="field-label">Keywords<input className="input" value={form.query} onChange={(e) => setForm({ ...form, query: e.target.value })} placeholder="Title, material, specs..." /></label>
           <label className="field-label">City or state<input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g. Pune or Maharashtra" /></label>
+          <label className="field-label">Discount tier<select className="input" value={form.discountTier} onChange={(e) => setForm({ ...form, discountTier: e.target.value })}><option value="">Any discount</option><option value="10-24">10% – 24%</option><option value="25-49">25% – 49%</option><option value="50+">50% or more</option></select></label>
           <fieldset className="category-filter"><legend>Category</legend><button type="button" className={!form.categoryId ? "filter-choice selected" : "filter-choice"} onClick={() => setForm({ ...form, categoryId: "" })}>All categories</button>{categories.map((item) => <button type="button" key={item.id} className={String(item.id) === String(form.categoryId) ? "filter-choice selected" : "filter-choice"} onClick={() => setForm({ ...form, categoryId: String(item.id) })}>{item.title}</button>)}</fieldset>
           <button className="button primary full-width">Apply filters</button>
         </form>
@@ -298,7 +325,7 @@ function ListingDetailPage() {
     <div className="detail-layout">
       <section>
         <div className="detail-image"><img src={imageUrl(listing.imageUrl)} alt={listing.title} onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/listing-placeholder.svg"; }} /></div>
-        <div className="panel detail-description"><div className="detail-labels"><span className="tag">{listing.category?.title}</span><span className={`status ${listing.status}`}>{statusLabels[listing.status] || listing.status}</span></div><h1>{listing.title}</h1><p>{listing.description}</p>{listing.tags?.length > 0 && <div className="listing-tags">{listing.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>}<dl className="spec-list"><div><dt>Condition</dt><dd>{conditionLabels[listing.condition] || listing.condition}</dd></div><div><dt>Available quantity</dt><dd>{listing.quantity} {listing.unit}</dd></div><div><dt>Pickup location</dt><dd>{listing.location}</dd></div><div><dt>Listing ID</dt><dd>LOT-{listing.id}</dd></div><div><dt>Posted</dt><dd>{listing.createdAt ? new Date(listing.createdAt).toLocaleDateString("en-IN") : "—"}</dd></div></dl></div>
+        <div className="panel detail-description"><div className="detail-labels"><span className="tag">{listing.category?.title}</span><span className={`status ${listing.status}`}>{statusLabels[listing.status] || listing.status}</span></div>{listing.tags?.includes("Demo sample") && <span className="demo-badge">DEMO INVENTORY · SAMPLE DATA</span>}<h1>{listing.title}</h1><p>{listing.description}</p>{listing.tags?.length > 0 && <div className="listing-tags">{listing.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>}<dl className="spec-list"><div><dt>SKU</dt><dd>{listing.sku || "—"}</dd></div><div><dt>Condition</dt><dd>{conditionLabels[listing.condition] || listing.condition}</dd></div><div><dt>Available quantity</dt><dd>{listing.quantity} {listing.unit}</dd></div><div><dt>Pickup location</dt><dd>{listing.location}</dd></div><div><dt>Expiry / obsolescence</dt><dd>{listing.expiryDate || "Not specified"}</dd></div><div><dt>Listing ID</dt><dd>LOT-{listing.id}</dd></div><div><dt>Posted</dt><dd>{listing.createdAt ? new Date(listing.createdAt).toLocaleDateString("en-IN") : "—"}</dd></div></dl></div>
       </section>
       <aside>
         <div className="panel offer-panel"><div className="price-heading"><span>Surplus price</span><span className="discount-badge">{listing.discountPercentage ?? 0}% discount</span></div><div className="detail-price"><strong>{formatMoney(listing.price)}</strong><del>{formatMoney(listing.originalPrice)}</del></div><p className="muted">Per {listing.unit}. Confirm taxes and delivery terms with the seller.</p><hr />
@@ -408,12 +435,33 @@ function DashboardPage({ role }) {
 function BuyerDashboard({ data, reload }) {
   const purchases = data.offers.filter((offer) => offer.status === "ACCEPTED");
   const activeOffers = data.offers.filter((offer) => offer.status !== "ACCEPTED");
-  return <><div className="stats-grid dashboard-stats"><Stat label="My offers" value={data.offers.length} /><Stat label="Confirmed deals" value={data.acceptedOfferCount} /></div><h2 className="subheading">Purchase history</h2>{purchases.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Agreed price</th><th>Quantity</th><th>Confirmed</th></tr></thead><tbody>{purchases.map((offer) => <tr key={offer.id}><td><Link to={`/listings/${offer.listing.id}`}>{offer.listing.title}</Link></td><td>{offer.listing.seller?.fullName}</td><td>{formatMoney(offer.counterPrice || offer.offerPrice)}<small>Total {formatMoney((offer.counterPrice || offer.offerPrice) * offer.quantity)}</small></td><td>{offer.quantity} {offer.listing.unit}</td><td>{offer.updatedAt ? new Date(offer.updatedAt).toLocaleDateString("en-IN") : "—"}</td></tr>)}</tbody></table></div> : <div className="empty-inline">Accepted deals will appear here.</div>}<h2 className="subheading top-space">Open and past offers</h2>{activeOffers.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Your offer</th><th>Quantity</th><th>Seller response</th><th>Status</th><th>Actions</th></tr></thead><tbody>{activeOffers.map((offer) => <tr key={offer.id}><td><Link to={`/listings/${offer.listing.id}`}>{offer.listing.title}</Link></td><td>{offer.listing.seller?.fullName}</td><td>{formatMoney(offer.offerPrice)}<small>Total {formatMoney(offer.totalAmount)}</small></td><td>{offer.quantity} {offer.listing.unit}</td><td>{offer.counterPrice ? `${formatMoney(offer.counterPrice)} · ${offer.sellerMessage || ""}` : "—"}</td><td><Status value={offer.status} /></td><td><OfferActions offer={offer} role="BUYER" reload={reload} /></td></tr>)}</tbody></table></div> : data.offers.length === 0 && <EmptyState title="No offers yet" text="Browse the marketplace and make an offer on a surplus listing." link="/browse" linkText="Browse listings" />}</>;
+  const exportPurchases = () => downloadCsv("purchase-history.csv",
+    ["Listing", "Seller", "SKU", "Agreed price", "Quantity", "Unit", "Total", "Status", "Confirmed"],
+    purchases.map((offer) => [offer.listing.title, offer.listing.seller?.fullName, offer.listing.sku,
+      offer.counterPrice || offer.offerPrice, offer.quantity, offer.listing.unit,
+      (offer.counterPrice || offer.offerPrice) * offer.quantity, offer.status, offer.updatedAt]));
+  return <><div className="dashboard-toolbar"><span className="muted">Negotiations and confirmed purchases</span><div className="action-row"><button className="button secondary" onClick={exportPurchases}>Export CSV</button><button className="button secondary" onClick={() => window.print()}>Print / Save PDF</button></div></div><div className="stats-grid dashboard-stats"><Stat label="My offers" value={data.offers.length} /><Stat label="Confirmed deals" value={data.acceptedOfferCount} /></div><h2 className="subheading">Purchase history</h2>{purchases.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Agreed price</th><th>Quantity</th><th>Confirmed</th></tr></thead><tbody>{purchases.map((offer) => <tr key={offer.id}><td><Link to={`/listings/${offer.listing.id}`}>{offer.listing.title}</Link><small>SKU {offer.listing.sku || "—"}</small></td><td>{offer.listing.seller?.fullName}</td><td>{formatMoney(offer.counterPrice || offer.offerPrice)}<small>Total {formatMoney((offer.counterPrice || offer.offerPrice) * offer.quantity)}</small></td><td>{offer.quantity} {offer.listing.unit}</td><td>{offer.updatedAt ? new Date(offer.updatedAt).toLocaleDateString("en-IN") : "—"}</td></tr>)}</tbody></table></div> : <div className="empty-inline">Accepted deals will appear here.</div>}<h2 className="subheading top-space">Open and past offers</h2>{activeOffers.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Your offer</th><th>Quantity</th><th>Seller response</th><th>Status</th><th>Actions</th></tr></thead><tbody>{activeOffers.map((offer) => <tr key={offer.id}><td><Link to={`/listings/${offer.listing.id}`}>{offer.listing.title}</Link></td><td>{offer.listing.seller?.fullName}</td><td>{formatMoney(offer.offerPrice)}<small>Total {formatMoney(offer.totalAmount)}</small></td><td>{offer.quantity} {offer.listing.unit}</td><td>{offer.counterPrice ? `${formatMoney(offer.counterPrice)} · ${offer.sellerMessage || ""}` : "—"}</td><td><Status value={offer.status} /></td><td><OfferActions offer={offer} role="BUYER" reload={reload} /></td></tr>)}</tbody></table></div> : data.offers.length === 0 && <EmptyState title="No offers yet" text="Browse the marketplace and make an offer on a surplus listing." link="/browse" linkText="Browse listings" />}</>;
 }
 
 function SellerDashboard({ data, reload }) {
-  return <><div className="stats-grid dashboard-stats"><Stat label="Active listings" value={data.listings.filter((item) => ["AVAILABLE", "UNDER_NEGOTIATION"].includes(item.status)).length} /><Stat label="Listed stock value" value={formatMoney(data.listedStockValue)} /><Stat label="Original stock value" value={formatMoney(data.tiedUpCapital)} /><Stat label="Offers to review" value={data.pendingOfferCount} /></div><div className="section-heading compact"><div><h2>My inventory</h2></div><Link className="button secondary" to="/seller/listings/new">＋ Add stock</Link></div>{data.listings.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Asking price</th><th>Quantity</th><th>Location</th><th>Status</th><th>Actions</th></tr></thead><tbody>{data.listings.map((item) => <tr key={item.id}><td><Link to={`/listings/${item.id}`}>{item.title}</Link></td><td>{formatMoney(item.price)}</td><td>{item.quantity} {item.unit}</td><td>{item.location}</td><td><Status value={item.status} /></td><td className="action-row"><Link className="button tiny secondary" to={`/seller/listings/${item.id}/edit`}>Edit</Link><button className="button tiny danger" onClick={() => confirmAction("Remove this listing?", () => api(`/api/listings/${item.id}`, { method: "DELETE" }).then(reload))}>Remove</button></td></tr>)}</tbody></table></div> : <EmptyState title="No inventory listed" text="Post your first surplus listing to reach buyers." link="/seller/listings/new" linkText="Create listing" />}
+  const activeListings = data.listings.filter((item) => ["AVAILABLE", "UNDER_NEGOTIATION"].includes(item.status));
+  const exportInventory = () => downloadCsv("inventory-liquidation-summary.csv",
+    ["SKU", "Listing", "Category", "Original price", "Liquidation price", "Discount percent", "Quantity", "Unit", "Location", "Condition", "Expiry date", "Status"],
+    data.listings.map((item) => [item.sku, item.title, item.category?.title, item.originalPrice, item.price,
+      item.discountPercentage, item.quantity, item.unit, item.location, item.condition, item.expiryDate, item.status]));
+  return <><div className="dashboard-toolbar"><span className="muted">Inventory health and liquidation pipeline</span><div className="action-row"><Link className="button secondary" to="/seller/listings/import">Import CSV</Link><button className="button secondary" onClick={exportInventory}>Export CSV</button><button className="button secondary" onClick={() => window.print()}>Print / Save PDF</button></div></div><div className="stats-grid dashboard-stats"><Stat label="Active listings" value={activeListings.length} /><Stat label="Listed stock value" value={formatMoney(data.listedStockValue)} /><Stat label="Original stock value" value={formatMoney(data.tiedUpCapital)} /><Stat label="Offers to review" value={data.pendingOfferCount} /></div><InventoryAnalytics listings={data.listings} /><div className="section-heading compact"><div><h2>My inventory</h2></div><Link className="button secondary" to="/seller/listings/new">＋ Add stock</Link></div>{data.listings.length ? <div className="table-wrap"><table><thead><tr><th>SKU / Listing</th><th>Asking price</th><th>Quantity</th><th>Location</th><th>Expiry / obsolescence</th><th>Status</th><th>Actions</th></tr></thead><tbody>{data.listings.map((item) => <tr key={item.id}><td><small>{item.sku || "—"}</small><Link to={`/listings/${item.id}`}>{item.title}</Link></td><td>{formatMoney(item.price)}<small>{item.discountPercentage}% below original</small></td><td>{item.quantity} {item.unit}</td><td>{item.location}</td><td>{item.expiryDate || "Not specified"}</td><td><Status value={item.status} /></td><td className="action-row"><Link className="button tiny secondary" to={`/seller/listings/${item.id}/edit`}>Edit</Link><button className="button tiny danger" onClick={() => confirmAction("Remove this listing?", () => api(`/api/listings/${item.id}`, { method: "DELETE" }).then(reload))}>Remove</button></td></tr>)}</tbody></table></div> : <EmptyState title="No inventory listed" text="Post your first surplus listing to reach buyers." link="/seller/listings/new" linkText="Create listing" />}
     <div className="section-heading compact top-space"><div><h2>Incoming offers</h2></div><span className="muted">{data.offers.length} total</span></div>{data.offers.length ? <div className="table-wrap"><table><thead><tr><th>Listing / buyer</th><th>Offer</th><th>Quantity</th><th>Message</th><th>Status</th><th>Actions</th></tr></thead><tbody>{data.offers.map((offer) => <tr key={offer.id}><td><Link to={`/listings/${offer.listing.id}`}>{offer.listing.title}</Link><small>{offer.buyer?.fullName} · {offer.buyer?.email}</small></td><td>{formatMoney(offer.offerPrice)}{offer.counterPrice && <small>Counter: {formatMoney(offer.counterPrice)}</small>}</td><td>{offer.quantity} {offer.listing.unit}</td><td>{offer.buyerMessage || "—"}</td><td><Status value={offer.status} /></td><td><OfferActions offer={offer} role="SELLER" reload={reload} /></td></tr>)}</tbody></table></div> : <div className="empty-inline">No offers received yet.</div>}</>;
+}
+
+function InventoryAnalytics({ listings }) {
+  const categories = new Map();
+  listings.filter((item) => ["AVAILABLE", "UNDER_NEGOTIATION"].includes(item.status)).forEach((item) => {
+    const title = item.category?.title || "Uncategorized";
+    categories.set(title, (categories.get(title) || 0) + Number(item.price) * Number(item.quantity));
+  });
+  const totals = [...categories.entries()].sort((a, b) => b[1] - a[1]);
+  const maxValue = Math.max(1, ...totals.map(([, amount]) => amount));
+  return <section className="panel analytics-panel"><div className="section-heading compact"><div><p className="overline">Inventory analytics</p><h2>Liquidation value by category</h2></div><span className="tag">{totals.length} categories</span></div>{totals.length ? <div className="analytics-bars">{totals.map(([category, amount]) => <div className="analytics-row" key={category}><span>{category}</span><div className="analytics-track"><span style={{ width: `${Math.max(3, amount / maxValue * 100)}%` }} /></div><strong>{formatMoney(amount)}</strong></div>)}</div> : <div className="empty-inline">Inventory analytics will appear when active listings are added.</div>}</section>;
 }
 
 function OfferActions({ offer, role, reload }) {
@@ -447,7 +495,12 @@ function AdminDashboard({ reload }) {
   const remove = async (id) => { await api(`/api/admin/listings/${id}`, { method: "DELETE" }); reloadListings(); };
   const reviewReport = async (id, action) => { await api(`/api/admin/reports/${id}/${action}`, { method: "PUT" }); reloadReports(); reloadListings(); };
   const runAction = (action) => action().catch((reason) => setActionError(reason.message));
-  return <><Notice message={actionError} kind="error" onClose={() => setActionError("")} /><PageState loading={statsLoading} error={statsError}><div className="stats-grid dashboard-stats"><Stat label="Businesses" value={stats.totalUsers} /><Stat label="Sellers" value={stats.totalSellers} /><Stat label="Buyers" value={stats.totalBuyers} /><Stat label="Listings" value={stats.totalListings} /><Stat label="Active surplus value" value={formatMoney(stats.totalActiveSurplusValue)} /><Stat label="Negotiations" value={stats.totalOffers} /><Stat label="Confirmed deals" value={stats.acceptedDealsCount} /><Stat label="Accepted deal volume" value={formatMoney(stats.totalAcceptedDealVolume)} /></div></PageState>
+  const exportListings = () => downloadCsv("platform-inventory-report.csv",
+    ["SKU", "Listing", "Seller", "Category", "Original price", "Liquidation price", "Quantity", "Unit", "Location", "Expiry date", "Status"],
+    (listings || []).map((item) => [item.sku, item.title, item.seller?.fullName, item.category?.title,
+      item.originalPrice, item.price, item.quantity, item.unit, item.location, item.expiryDate, item.status]));
+  return <><div className="dashboard-toolbar"><span className="muted">Marketplace performance and moderation</span><div className="action-row"><button className="button secondary" onClick={exportListings}>Export CSV</button><button className="button secondary" onClick={() => window.print()}>Print / Save PDF</button></div></div><Notice message={actionError} kind="error" onClose={() => setActionError("")} /><PageState loading={statsLoading} error={statsError}><div className="stats-grid dashboard-stats"><Stat label="Businesses" value={stats.totalUsers} /><Stat label="Sellers" value={stats.totalSellers} /><Stat label="Buyers" value={stats.totalBuyers} /><Stat label="Listings" value={stats.totalListings} /><Stat label="Active surplus value" value={formatMoney(stats.totalActiveSurplusValue)} /><Stat label="Negotiations" value={stats.totalOffers} /><Stat label="Confirmed deals" value={stats.acceptedDealsCount} /><Stat label="Accepted deal volume" value={formatMoney(stats.totalAcceptedDealVolume)} /></div></PageState>
+    <InventoryAnalytics listings={listings || []} />
     <div className="section-heading compact top-space"><div><h2>Business verification queue</h2><p>Review submitted business profiles.</p></div><span className="tag">{stats?.pendingVerifications ?? 0} pending</span></div>
     <PageState loading={businessesLoading} error={businessesError}>{businesses?.length ? <div className="table-wrap"><table><thead><tr><th>Business</th><th>Owner</th><th>Tax ID</th><th>Location</th><th>Status</th><th>Review</th></tr></thead><tbody>{businesses.map((business) => <tr key={business.id}><td>{business.companyName}<small>{business.industryType}</small></td><td>{business.fullName}<small>{business.email}</small></td><td>{business.taxId}</td><td>{business.city}, {business.state}</td><td><Status value={business.verificationStatus} /></td><td className="action-row">{business.verificationStatus !== "APPROVED" && <button className="button tiny primary" onClick={() => runAction(() => update(`/api/admin/verify/${business.id}`))}>Approve</button>}{business.verificationStatus !== "REJECTED" && <button className="button tiny danger" onClick={() => runAction(() => update(`/api/admin/reject/${business.id}`))}>Reject</button>}</td></tr>)}</tbody></table></div> : <EmptyState title="No businesses to review" text="New business registrations will appear here." />}</PageState>
     <div className="section-heading compact top-space"><div><h2>Listing moderation</h2></div></div><PageState loading={listingsLoading} error={listingsError}>{listings?.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Category</th><th>Price</th><th>Location</th><th>Status</th><th>Moderation</th></tr></thead><tbody>{listings.map((item) => <tr key={item.id}><td><Link to={`/listings/${item.id}`}>{item.title}</Link></td><td>{item.seller?.fullName}</td><td>{item.category?.title}</td><td>{formatMoney(item.price)}</td><td>{item.location}</td><td><Status value={item.status} /></td><td><button className="button tiny danger" onClick={() => window.confirm("Remove this listing?") && runAction(() => remove(item.id))}>Remove</button></td></tr>)}</tbody></table></div> : <EmptyState title="No listings" text="Listings will appear here for moderation." />}</PageState>
@@ -479,6 +532,7 @@ function ListingFormPage() {
     } catch (reason) { setError(reason.message); } finally { setBusy(false); }
   };
   return <RequireRole roles={["SELLER"]}><div className="page-container narrow-page"><div className="page-heading"><div><p className="overline">Seller inventory</p><h1>{editing ? "Edit listing" : "Post surplus stock"}</h1><p>Share clear details so buyers can make informed offers.</p></div></div><PageState loading={categoriesLoading || listingLoading} error={categoriesError || listingError}><Notice message={error} kind="error" onClose={() => setError("")} /><form className="panel form-grid" onSubmit={submit}>
+    <label className="field-label">SKU<input className="input" name="sku" defaultValue={current?.sku} maxLength="64" pattern="[A-Za-z0-9._/-]+" placeholder="e.g. SKU-STEEL-042" required /></label>
     <label className="field-label span-two">Listing title<input className="input" name="title" defaultValue={current?.title} maxLength="200" required /></label>
     <label className="field-label span-two">Description<textarea className="input" name="description" rows="5" defaultValue={current?.description} required /></label>
     <label className="field-label">Category<select className="input" name="categoryId" defaultValue={current?.category?.id ?? ""} required><option value="" disabled>Select a category</option>{categories?.map((category) => <option key={category.id} value={category.id}>{category.title}</option>)}</select></label>
@@ -489,9 +543,85 @@ function ListingFormPage() {
     <label className="field-label">Unit<input className="input" name="unit" maxLength="30" defaultValue={current?.unit} placeholder="e.g. Tons, Pieces" required /></label>
     <label className="field-label span-two">Pickup location<input className="input" name="location" maxLength="150" defaultValue={current?.location || [user?.businessProfile?.city, user?.businessProfile?.state].filter(Boolean).join(", ")} required /></label>
     <label className="field-label span-two">Tags <span className="muted">(up to 10, comma-separated)</span><input className="input" name="tags" defaultValue={current?.tags?.join(", ")} placeholder="e.g. recyclable, stainless steel, bulk" /></label>
+    <label className="field-label">Expiry / obsolescence date<input className="input" name="expiryDate" type="date" defaultValue={current?.expiryDate || ""} /></label>
     <label className="field-label span-two">Product image URL <span className="muted">(optional)</span><input className="input" name="imageUrl" type="url" defaultValue={current?.imageUrl} placeholder="https://…" /></label>
-    <div className="form-actions span-two"><Link className="button secondary" to="/seller/dashboard">Cancel</Link><button className="button primary" disabled={busy}>{busy ? "Saving…" : editing ? "Save changes" : "Publish listing"}</button></div>
+    <div className="form-actions span-two"><Link className="button secondary" to="/seller/dashboard">Cancel</Link><Link className="button secondary" to="/seller/listings/import">Bulk intake</Link><button className="button primary" disabled={busy}>{busy ? "Saving…" : editing ? "Save changes" : "Publish listing"}</button></div>
   </form></PageState></div></RequireRole>;
+}
+
+function BulkListingImportPage() {
+  const { data: categories, loading, error } = useLoad(() => api("/api/categories"));
+  const [listings, setListings] = useState([]);
+  const [fileError, setFileError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const categoryLookup = useMemo(() => new Map((categories || []).map((category) => [category.title.trim().toLowerCase(), category.id])), [categories]);
+  const downloadTemplate = () => downloadCsv("inventory-intake-template.csv",
+    ["sku", "title", "description", "category", "originalPrice", "price", "quantity", "unit", "condition", "location", "expiryDate", "imageUrl", "tags"],
+    [["SKU-001", "Surplus steel sheets", "Unused surplus, stored indoors", "Construction & Raw Metals", 8200, 5900, 24, "Sheets", "BRAND_NEW_SURPLUS", "Pune, Maharashtra", "", "", "steel; bulk"]]);
+  const onFile = async (event) => {
+    const file = event.target.files?.[0];
+    setListings([]);
+    setFileError("");
+    setNotice("");
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setFileError("CSV file must be smaller than 2 MB.");
+      return;
+    }
+    try {
+      const parsed = parseCsv((await file.text()).replace(/^\uFEFF/, ""));
+      if (parsed.length > 100) throw new Error("Import up to 100 listings at a time.");
+      const requiredHeaders = ["sku", "title", "description", "category", "originalprice", "price", "quantity", "unit", "condition", "location"];
+      const normalized = parsed.map((row, index) => {
+        const values = Object.fromEntries(Object.entries(row).map(([key, value]) => [key.trim().toLowerCase(), value]));
+        const missing = requiredHeaders.filter((header) => !values[header]);
+        if (missing.length) throw new Error(`Row ${index + 2} is missing: ${missing.join(", ")}.`);
+        const categoryId = categoryLookup.get(values.category.trim().toLowerCase());
+        if (!categoryId) throw new Error(`Row ${index + 2} has an unknown category: ${values.category}.`);
+        const originalPrice = Number(values.originalprice);
+        const price = Number(values.price);
+        const quantity = Number(values.quantity);
+        if (![originalPrice, price, quantity].every(Number.isFinite) || originalPrice <= 0 || price <= 0 || quantity < 1 || !Number.isInteger(quantity)) {
+          throw new Error(`Row ${index + 2} must have positive prices and a whole-number quantity.`);
+        }
+        return {
+          sku: values.sku.trim(),
+          title: values.title.trim(),
+          description: values.description.trim(),
+          categoryId,
+          originalPrice,
+          price,
+          quantity,
+          unit: values.unit.trim(),
+          condition: values.condition.trim(),
+          location: values.location.trim(),
+          expiryDate: values.expirydate || null,
+          imageUrl: values.imageurl || null,
+          tags: values.tags ? values.tags.split(";").map((tag) => tag.trim()).filter(Boolean) : [],
+        };
+      });
+      const uniqueSkus = new Set(normalized.map((item) => item.sku.toUpperCase()));
+      if (uniqueSkus.size !== normalized.length) throw new Error("The file contains duplicate SKUs.");
+      setListings(normalized);
+    } catch (reason) {
+      setFileError(reason.message);
+    }
+  };
+  const submit = async () => {
+    setBusy(true);
+    setFileError("");
+    try {
+      const result = await api("/api/listings/bulk", { method: "POST", body: JSON.stringify(listings) });
+      setNotice(`${result.created} listings added to your inventory.`);
+      setListings([]);
+    } catch (reason) {
+      setFileError(reason.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <RequireRole roles={["SELLER"]}><div className="page-container narrow-page"><div className="page-heading"><div><p className="overline">Inventory intake</p><h1>Bulk import listings</h1><p>Upload a CSV and preview rows before publishing them.</p></div></div><PageState loading={loading} error={error}><section className="panel stack-form"><Notice message={notice} onClose={() => setNotice("")} /><div className="import-instructions"><strong>CSV format</strong><p>Use the template. Categories must match a marketplace category exactly. Conditions use enum names, such as BRAND_NEW_SURPLUS. Separate tags with semicolons.</p><button type="button" className="button secondary" onClick={downloadTemplate}>Download CSV template</button></div><label className="field-label">Select inventory CSV<input className="input" type="file" accept=".csv,text/csv" onChange={onFile} /></label><Notice message={fileError} kind="error" onClose={() => setFileError("")} />{listings.length > 0 && <><div className="import-preview"><strong>{listings.length} listings ready</strong><span>Preview: {listings.slice(0, 3).map((item) => `${item.sku} · ${item.title}`).join(" / ")}</span></div><div className="form-actions"><Link className="button secondary" to="/seller/dashboard">Cancel</Link><button className="button primary" disabled={busy} onClick={submit}>{busy ? "Importing…" : `Publish ${listings.length} listings`}</button></div></>}</section></PageState></div></RequireRole>;
 }
 
 function ProfilePage() {
@@ -542,6 +672,7 @@ function App() {
       <Route path="/seller/dashboard" element={<DashboardPage role="SELLER" />} />
       <Route path="/seller/listings/new" element={<ListingFormPage />} />
       <Route path="/seller/listings/:id/edit" element={<ListingFormPage />} />
+      <Route path="/seller/listings/import" element={<BulkListingImportPage />} />
       <Route path="/admin/dashboard" element={<DashboardPage role="ADMIN" />} />
       <Route path="/profile" element={<ProfilePage />} />
       <Route path="/notifications" element={<NotificationsPage />} />

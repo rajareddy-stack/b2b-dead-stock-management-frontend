@@ -60,7 +60,13 @@ export const statusLabels = {
 };
 
 export function imageUrl(value) {
-  return value || "/images/listing-placeholder.svg";
+  if (!value) return "/images/listing-placeholder.svg";
+  try {
+    const parsed = new URL(value, window.location.origin);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "/images/listing-placeholder.svg";
+  } catch {
+    return "/images/listing-placeholder.svg";
+  }
 }
 
 export function roleHome(role) {
