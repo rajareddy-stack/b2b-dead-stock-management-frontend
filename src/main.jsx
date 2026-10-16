@@ -12,8 +12,18 @@ import {
   useLocation,
   useSearchParams,
 } from "react-router-dom";
-import { api, conditionLabels, formatMoney, imageUrl, roleHome, statusLabels } from "./api.js";
+import { api, conditionLabels, formatMoney, roleHome, statusLabels } from "./api.js";
 import { downloadCsv, parseCsv } from "./csv.js";
+import {
+  IconSearch,
+  IconMapPin,
+  IconArrowRight,
+  IconCheck,
+  IconClose,
+  IconDownload,
+  IconUpload,
+  IconAlertCircle,
+} from "./icons.jsx";
 import "./styles.css";
 
 const AuthContext = createContext(null);
@@ -40,20 +50,23 @@ function AuthProvider({ children }) {
 
   useEffect(() => {
     refreshUser().catch((error) => {
-      console.error("Could not restore the signed-in user:", error);
+      console.error("Could not restore user session:", error);
       setLoading(false);
     });
   }, []);
 
-  const value = useMemo(() => ({
-    user,
-    loading,
-    refreshUser,
-    signOut: async () => {
-      await api("/api/auth/logout", { method: "POST" });
-      setUser(null);
-    },
-  }), [user, loading]);
+  const value = useMemo(
+    () => ({
+      user,
+      loading,
+      refreshUser,
+      signOut: async () => {
+        await api("/api/auth/logout", { method: "POST" });
+        setUser(null);
+      },
+    }),
+    [user, loading]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -73,52 +86,87 @@ function useLoad(loader, dependencies = []) {
     setLoading(true);
     setError("");
     loader()
-      .then((result) => { if (active) setData(result); })
-      .catch((reason) => { if (active) setError(reason.message || "Could not load this page."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+      .then((result) => {
+        if (active) setData(result);
+      })
+      .catch((reason) => {
+        if (active) setError(reason.message || "Could not load records.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [...dependencies, reloadKey]);
 
   return { data, error, loading, reload: () => setReloadKey((key) => key + 1), setData };
 }
 
 function PageState({ loading, error, children }) {
-  if (loading) return <div className="loading-skeleton-grid" aria-label="Loading content">{[0, 1, 2].map((item) => <span className="skeleton" key={item} />)}</div>;
-  if (error) return <div className="page-state error-state"><strong>Could not load this page.</strong><span>{error}</span><button className="button secondary" onClick={() => window.location.reload()}>Try again</button></div>;
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: "80px 0" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.15em" }}>
+          Retrieving Records &amp; Manifests…
+        </span>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="editorial-notice error" style={{ margin: "32px auto", maxWidth: "600px" }}>
+        <div>
+          <strong style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "12px", textTransform: "uppercase" }}>
+            Operational Notice
+          </strong>
+          <span>{error}</span>
+        </div>
+        <button className="button secondary tiny" onClick={() => window.location.reload()}>
+          Retry
+        </button>
+      </div>
+    );
+  }
   return children;
 }
 
 function Notice({ message, kind = "success", onClose }) {
   if (!message) return null;
-  return <div className={`notice ${kind}`} role="status"><span>{message}</span><button aria-label="Dismiss message" onClick={onClose}>×</button></div>;
+  return (
+    <div className={`editorial-notice ${kind === "error" ? "error" : ""}`} role="status">
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        {kind === "success" && <IconCheck size={16} />}
+        {kind === "error" && <IconAlertCircle size={16} />}
+        <span>{message}</span>
+      </div>
+      {onClose && (
+        <button onClick={onClose} aria-label="Dismiss notice" style={{ color: "inherit", opacity: 0.8 }}>
+          <IconClose size={15} />
+        </button>
+      )}
+    </div>
+  );
 }
 
 function Layout() {
   const { user, loading, signOut } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [headerKw, setHeaderKw] = useState("");
+  const [headerLoc, setHeaderLoc] = useState("");
   const [notice, setNotice] = useState("");
-  const [theme, setTheme] = useState(() => {
-    try {
-      return window.localStorage.getItem("marketplace-theme") || "light";
-    } catch {
-      return "light";
-    }
-  });
   const navigate = useNavigate();
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    try {
-      window.localStorage.setItem("marketplace-theme", theme);
-    } catch (error) {
-      console.error("Could not save the display theme preference:", error);
-    }
-  }, [theme]);
+  const handleHeaderSearch = (e) => {
+    e.preventDefault();
+    const params = new URLSearchParams();
+    if (headerKw.trim()) params.set("query", headerKw.trim());
+    if (headerLoc.trim()) params.set("location", headerLoc.trim());
+    navigate(`/browse${params.size ? `?${params}` : ""}`);
+  };
 
   const logout = async () => {
     try {
       await signOut();
-      setMenuOpen(false);
       navigate("/");
     } catch (error) {
       setNotice(error.message);
@@ -127,341 +175,1576 @@ function Layout() {
 
   return (
     <>
-      <header className="site-header">
-        <div className="header-inner">
-          <Link className="brand" to="/" aria-label="B2B Dead Stock Management home">
-            <span className="brand-icon">◇</span>
-            <span><strong>B2B Dead Stock Management</strong><small>Inventory management</small></span>
-          </Link>
-          <button className="menu-toggle" aria-label="Toggle navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>☰</button>
-          <nav className={menuOpen ? "main-nav open" : "main-nav"}>
-            <NavLink to="/browse" onClick={() => setMenuOpen(false)}>Marketplace</NavLink>
-            <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>{theme === "dark" ? "☀ Light" : "◐ Dark"}</button>
-            {user && <NavLink to={roleHome(user.role)} onClick={() => setMenuOpen(false)}>Dashboard</NavLink>}
-            {user && <NavLink to="/profile" onClick={() => setMenuOpen(false)}>Business profile</NavLink>}
-            {user && <NavLink to="/notifications" onClick={() => setMenuOpen(false)}>Notifications</NavLink>}
-            {loading ? null : user ? (
-              <div className="nav-user">
-                <span>{user.businessProfile?.companyName || user.fullName}</span>
-                <button className="button text-button" onClick={logout}>Sign out</button>
-              </div>
+      {/* Top Editorial Bar */}
+      <div className="top-bar-announcement">
+        <div className="top-bar-inner">
+          <div className="top-trust-badge">
+            <span className="dot" />
+            <span>Industrial Dead Stock &amp; Raw Material Exchange · Direct Counterparties</span>
+          </div>
+          <div className="top-bar-links">
+            <span style={{ fontWeight: 600 }}>100% Tax ID / GST Verified</span>
+            <span>|</span>
+            <Link to="/browse" className="top-bar-link">Catalog</Link>
+            <span>|</span>
+            {user ? (
+              <span style={{ color: "var(--foreground)", fontWeight: 700 }}>
+                {user.businessProfile?.companyName || user.fullName} ({user.role})
+              </span>
             ) : (
-              <div className="nav-actions">
-                <Link className="button secondary" to="/login" onClick={() => setMenuOpen(false)}>Sign in</Link>
-                <Link className="button primary" to="/register" onClick={() => setMenuOpen(false)}>Join marketplace</Link>
+              <Link to="/login" className="top-bar-link">Enterprise Sign In</Link>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Header */}
+      <header className="site-header">
+        <div className="header-main-row">
+          {/* Text-Only Branding: NO LOGO ICON */}
+          <Link className="brand-text-block" to="/" aria-label="b2b dead stock marketplace home">
+            <span className="brand-text-main">
+              b2b dead stock marketplace
+              <span className="brand-accent-tag">B2B</span>
+            </span>
+            <span className="brand-text-sub">Commercial Surplus &amp; Raw Material Exchange</span>
+          </Link>
+
+          {/* Minimalist Integrated Search Bar */}
+          <form className="header-search-bar" onSubmit={handleHeaderSearch}>
+            <select
+              className="search-loc-select"
+              value={headerLoc}
+              onChange={(e) => setHeaderLoc(e.target.value)}
+              aria-label="Filter yard location"
+            >
+              <option value="">All Regions</option>
+              <option value="Ahmedabad">Ahmedabad</option>
+              <option value="Mumbai">Mumbai</option>
+              <option value="Delhi NCR">Delhi NCR</option>
+              <option value="Pune">Pune</option>
+              <option value="Surat">Surat</option>
+              <option value="Chennai">Chennai</option>
+              <option value="Bengaluru">Bengaluru</option>
+              <option value="Hyderabad">Hyderabad</option>
+              <option value="Kolkata">Kolkata</option>
+            </select>
+            <input
+              className="search-kw-input"
+              type="text"
+              placeholder="Search steel grades, coils, motors, packaging, timber..."
+              value={headerKw}
+              onChange={(e) => setHeaderKw(e.target.value)}
+            />
+            <button className="search-submit-btn" type="submit" aria-label="Execute search">
+              <IconSearch size={14} />
+              <span>Search</span>
+            </button>
+          </form>
+
+          {/* User & Action Navigation */}
+          <div className="header-user-actions">
+            <NavLink className="nav-link-btn" to="/browse">
+              Marketplace
+            </NavLink>
+
+            {user && (
+              <NavLink className="nav-link-btn" to={roleHome(user.role)}>
+                Workspace
+              </NavLink>
+            )}
+
+            {user && (
+              <NavLink className="nav-link-btn" to="/profile">
+                Credentials
+              </NavLink>
+            )}
+
+            {user && (
+              <NavLink className="nav-link-btn" to="/notifications">
+                Inquiries
+              </NavLink>
+            )}
+
+            {/* Changed & Prominent Position for "Post Lot" */}
+            <Link
+              className="btn-post-lot-header"
+              to={user?.role === "SELLER" ? "/seller/listings/new" : user ? "/seller/dashboard" : "/register"}
+            >
+              + Post Surplus Lot
+            </Link>
+
+            {loading ? null : user ? (
+              <button className="button subtle tiny" onClick={logout}>
+                Sign Out
+              </button>
+            ) : (
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Link className="button secondary tiny" to="/login">
+                  Sign In
+                </Link>
+                <Link className="button primary tiny" to="/register">
+                  Join
+                </Link>
               </div>
             )}
-          </nav>
+          </div>
+        </div>
+
+        {/* Sub-Header Category Strip */}
+        <div className="category-ribbon">
+          <div className="category-ribbon-inner">
+            <Link to="/browse" className="category-ribbon-item special">
+              [ All Surplus Lots ]
+            </Link>
+            <Link to="/browse?categoryId=1" className="category-ribbon-item">
+              Construction &amp; Raw Metals
+            </Link>
+            <Link to="/browse?categoryId=2" className="category-ribbon-item">
+              Machinery &amp; Industrial Parts
+            </Link>
+            <Link to="/browse?categoryId=3" className="category-ribbon-item">
+              Packaging &amp; Warehouse
+            </Link>
+            <Link to="/browse?categoryId=4" className="category-ribbon-item">
+              Textiles &amp; Raw Fabrics
+            </Link>
+            <Link to="/browse?categoryId=5" className="category-ribbon-item">
+              Timber &amp; Dimensional Lumber
+            </Link>
+            <Link to="/browse?discountTier=50+" className="category-ribbon-item special">
+              [ 50%+ Deep Clearance ]
+            </Link>
+          </div>
         </div>
       </header>
-      <Notice message={notice} kind="error" onClose={() => setNotice("")} />
-      <main className="main"><Outlet /></main>
-      <footer className="site-footer">
-        <div className="footer-inner"><div><strong>B2B Dead Stock Management</strong><p>Trade surplus. Recover value.</p></div><span>Built for Indian businesses · 2026</span></div>
+
+      {notice && (
+        <div style={{ width: "min(var(--container-max), 100% - 48px)", margin: "20px auto 0" }}>
+          <Notice message={notice} kind="error" onClose={() => setNotice("")} />
+        </div>
+      )}
+
+      <main className="main">
+        <Outlet />
+      </main>
+
+      {/* Editorial Footer */}
+      <footer className="editorial-footer">
+        <div className="footer-inner-editorial">
+          <div>
+            <div className="brand-text-main" style={{ fontSize: "19px", marginBottom: "6px" }}>
+              b2b dead stock marketplace
+            </div>
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--muted-foreground)", maxWidth: "520px" }}>
+              Direct commercial liquidation exchange. Connecting accredited mills, manufacturers, fabricators, and enterprises across India with strict GST transparency and zero broker margins.
+            </p>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.12em", display: "block" }}>
+              Minimalist Monochrome Industrial Exchange · 2026
+            </span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--muted-foreground)" }}>
+              Tax ID, Mill Test, and Physical Yard Verification Required
+            </span>
+          </div>
+        </div>
       </footer>
     </>
   );
 }
 
+/* ==========================================================================
+   Listing Card: ZERO IMAGES · PURE ARCHITECTURAL TECHNICAL MANIFEST
+   ========================================================================== */
 function ListingCard({ listing }) {
+  const discount = listing.discountPercentage ?? 0;
+
   return (
-    <article className="listing-card">
-      <Link className="listing-image-wrap" to={`/listings/${listing.id}`} aria-label={`View ${listing.title}`}>
-        <img src={imageUrl(listing.imageUrl)} alt={listing.title} onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/listing-placeholder.svg"; }} />
-        <span className="discount-badge">{listing.discountPercentage ?? 0}% OFF</span>
-        <span className="condition-badge">{conditionLabels[listing.condition] || listing.condition}</span>
-      </Link>
-      <div className="listing-content">
-        <div className="listing-meta"><span>{listing.category?.title}</span><span className="listing-location">⌖ {listing.location}</span></div>
-        {listing.tags?.includes("Demo sample") && <span className="demo-badge">DEMO INVENTORY</span>}
-        <h3><Link to={`/listings/${listing.id}`}>{listing.title}</Link></h3>
-        <p className="listing-description">{listing.description}</p>
-        {listing.tags?.length > 0 && <div className="listing-tags">{listing.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>}
-        <div className="listing-price-row"><div><del>{formatMoney(listing.originalPrice)}</del><strong>{formatMoney(listing.price)}</strong><small>per {listing.unit}</small></div><div className="stock-count"><strong>{listing.quantity} {listing.unit}</strong><small>Available stock</small></div></div>
-        <Link className="button secondary full-width" to={`/listings/${listing.id}`}>View &amp; negotiate <span aria-hidden="true">→</span></Link>
+    <article className="listing-mono-card">
+      {/* Technical Spec Stamp Box (Replaces Photos entirely) */}
+      <div className="card-technical-stamp">
+        <div className="stamp-top-row">
+          <span className="stamp-sku">
+            {listing.sku || `LOT-${listing.id}`}
+          </span>
+          {discount > 0 && (
+            <span className="stamp-discount">
+              {discount}% REDUCED
+            </span>
+          )}
+        </div>
+
+        <table className="stamp-spec-table">
+          <tbody>
+            <tr>
+              <td>CLASSIFICATION</td>
+              <td className="val">{listing.category?.title}</td>
+            </tr>
+            <tr>
+              <td>YARD LOCATION</td>
+              <td className="val">
+                <IconMapPin size={11} style={{ verticalAlign: "middle", marginRight: "3px" }} />
+                {listing.location}
+              </td>
+            </tr>
+            <tr>
+              <td>CONDITION</td>
+              <td className="val">{conditionLabels[listing.condition] || listing.condition}</td>
+            </tr>
+            <tr>
+              <td>AVAILABLE QUANTITY</td>
+              <td className="val">{listing.quantity} {listing.unit}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Content Details */}
+      <div className="card-content-box">
+        <h3 className="card-title-serif">
+          <Link to={`/listings/${listing.id}`}>{listing.title}</Link>
+        </h3>
+        <p className="card-summary-text">{listing.description}</p>
+
+        {/* Valuation Floor */}
+        <div className="card-valuation-floor">
+          <div className="valuation-left">
+            {discount > 0 && (
+              <span className="valuation-original">{formatMoney(listing.originalPrice)}</span>
+            )}
+            <span className="valuation-surplus">{formatMoney(listing.price)}</span>
+            <span className="valuation-unit">per {listing.unit}</span>
+          </div>
+          <div className="valuation-stock">
+            <strong>{listing.quantity} {listing.unit}</strong>
+            <span>Available Stock</span>
+          </div>
+        </div>
+
+        {/* Dual Actions */}
+        <div className="card-actions-grid">
+          <Link className="button primary tiny" to={`/listings/${listing.id}`}>
+            Propose Offer
+          </Link>
+          <Link className="button secondary tiny" to={`/listings/${listing.id}`}>
+            Specifications
+          </Link>
+        </div>
       </div>
     </article>
   );
 }
 
+/* ==========================================================================
+   Home Page: Minimalist Monochrome Hero, Inverted Stats, Categories, RFQ
+   ========================================================================== */
 function HomePage() {
   const { data, loading, error } = useLoad(() => api("/api/public/overview"));
+  const navigate = useNavigate();
+  const [heroKw, setHeroKw] = useState("");
+  const [heroLoc, setHeroLoc] = useState("");
+
+  const handleHeroSearch = (e) => {
+    e.preventDefault();
+    const params = new URLSearchParams();
+    if (heroKw.trim()) params.set("query", heroKw.trim());
+    if (heroLoc.trim()) params.set("location", heroLoc.trim());
+    navigate(`/browse${params.size ? `?${params}` : ""}`);
+  };
+
   return (
     <PageState loading={loading} error={error}>
-      <section className="hero">
-        <div className="hero-inner">
-          <div className="hero-copy">
-            <span className="eyebrow">✓ For Indian businesses</span>
-            <h1>Move surplus stock.<br /><em>Recover working capital.</em></h1>
-            <p>Connect with verified businesses to sell surplus materials and find value-priced inventory.</p>
-            <SearchBox />
-            <div className="trust-points"><span>✓ Verified businesses</span><span>↔ Price negotiation</span><span>⌖ Local yard pickup</span></div>
+      {/* Hero Section */}
+      <section className="mono-hero-section">
+        <div className="hero-container">
+          <div className="hero-meta-label">
+            Industrial Surplus · Direct Counterparties
           </div>
-          <div className="overview-card">
-            <h2>Dead stock overview</h2>
-            <div className="stats-grid">
-              <Stat label="Active surplus value" value={formatMoney(data?.stats.totalActiveSurplusValue)} />
-              <Stat label="Surplus listings" value={data?.stats.totalListings ?? "—"} />
-              <Stat label="Registered companies" value={data?.stats.totalUsers ?? "—"} />
-              <Stat label="Deals confirmed" value={data?.stats.acceptedDealsCount ?? "—"} />
+
+          <h1 className="hero-headline-oversized">
+            DEAD STOCK. RAW MATERIALS.
+            <em>REDUCED TO ESSENCE.</em>
+          </h1>
+
+          <p className="hero-lead-text">
+            An uncompromising commercial liquidation exchange connecting accredited manufacturers, fabricators, and enterprises. Acquire primary overruns, off-spec coils, and production lots at 30% to 70% below list value with strict GST transparency.
+          </p>
+
+          {/* Search Console & Prominent "Post Lot" Card */}
+          <div className="hero-search-wrapper">
+            <form className="hero-search-card" onSubmit={handleHeroSearch}>
+              <select
+                className="hero-search-loc"
+                value={heroLoc}
+                onChange={(e) => setHeroLoc(e.target.value)}
+                aria-label="Select state or city"
+              >
+                <option value="">All Yards / India</option>
+                <option value="Ahmedabad">Ahmedabad, Gujarat</option>
+                <option value="Mumbai">Mumbai, Maharashtra</option>
+                <option value="Delhi NCR">Delhi NCR</option>
+                <option value="Pune">Pune, Maharashtra</option>
+                <option value="Surat">Surat, Gujarat</option>
+                <option value="Chennai">Chennai, Tamil Nadu</option>
+                <option value="Bengaluru">Bengaluru, Karnataka</option>
+                <option value="Hyderabad">Hyderabad, Telangana</option>
+              </select>
+              <input
+                className="hero-search-input"
+                type="text"
+                placeholder="Grade, metallurgy, or SKU (e.g. Stainless 304, Cold-Rolled)..."
+                value={heroKw}
+                onChange={(e) => setHeroKw(e.target.value)}
+              />
+              <button className="hero-search-btn" type="submit">
+                <IconSearch size={15} />
+                <span>Search Lots</span>
+              </button>
+            </form>
+
+            {/* Changed Position of Post Lot: Prominently featured right here */}
+            <Link to="/seller/listings/new" className="hero-post-lot-card">
+              <span className="sub">Have Dormant Stock?</span>
+              <span className="title">
+                Post A Lot Now <IconArrowRight size={16} />
+              </span>
+            </Link>
+          </div>
+
+          {/* Tag Badges */}
+          <div className="hero-tags-row">
+            <span style={{ fontWeight: 700, textTransform: "uppercase" }}>Curated Indices:</span>
+            {["Structural Steel", "Cold-Rolled Coils", "Electric Induction Motors", "Corrugated Shipping Cartons", "Raw Cotton Canvas", "50%+ Clearance"].map((tag) => (
+              <Link
+                key={tag}
+                to={tag === "50%+ Clearance" ? "/browse?discountTier=50+" : `/browse?query=${encodeURIComponent(tag)}`}
+                className="hero-tag-badge"
+              >
+                {tag}
+              </Link>
+            ))}
+          </div>
+
+          {/* Inverted Stats Strip (Bold Choice #3: Black background, white text, subtle vertical lines) */}
+          <div className="mono-inverted-stats">
+            <div className="stat-cell">
+              <div className="stat-number-serif">
+                ₹{formatMoney(data?.stats.totalActiveSurplusValue).replace("₹", "").trim()}
+              </div>
+              <div className="stat-label-mono">Active Surplus Valuation</div>
             </div>
-            <Link className="button primary full-width" to="/register">Create a business account</Link>
+
+            <div className="stat-cell">
+              <div className="stat-number-serif">{data?.stats.totalListings ?? "—"}</div>
+              <div className="stat-label-mono">Cataloged Material Lots</div>
+            </div>
+
+            <div className="stat-cell">
+              <div className="stat-number-serif">{data?.stats.totalUsers ?? "—"}</div>
+              <div className="stat-label-mono">Accredited Enterprises</div>
+            </div>
+
+            <div className="stat-cell">
+              <div className="stat-number-serif">{data?.stats.acceptedDealsCount ?? "—"}</div>
+              <div className="stat-label-mono">Executed Transactions</div>
+            </div>
           </div>
         </div>
       </section>
+
+      {/* Sourcing Classifications */}
       <section className="section">
-        <div className="section-heading"><div><p className="overline">Find what you need</p><h2>Browse by category</h2></div><Link to="/browse">All categories →</Link></div>
-        <div className="category-grid">{(data?.categories ?? []).map((category) => <Link key={category.id} to={`/browse?categoryId=${category.id}`} className="category-card"><span className="category-icon">▦</span><span><strong>{category.title}</strong><small>{category.description}</small></span><b>→</b></Link>)}</div>
+        <div className="section-inner">
+          <div className="section-header-bar">
+            <div>
+              <h2 className="section-title-serif">Material Classifications</h2>
+              <p className="section-subtitle-mono">
+                Indexed industrial categories with metallurgical &amp; technical standards
+              </p>
+            </div>
+            <Link className="button secondary tiny" to="/browse">
+              Complete Catalog <IconArrowRight size={13} />
+            </Link>
+          </div>
+
+          <div className="category-mono-grid">
+            {(data?.categories ?? []).map((cat, idx) => {
+              const roman = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][idx] || `0${idx + 1}`;
+              return (
+                <Link key={cat.id} to={`/browse?categoryId=${cat.id}`} className="category-mono-card">
+                  <div>
+                    <span className="cat-card-num">SECTION {roman}</span>
+                    <h3 className="cat-card-title">{cat.title}</h3>
+                    <p className="cat-card-desc">{cat.description}</p>
+                  </div>
+                  <span className="cat-card-arrow">
+                    View Available Lots <IconArrowRight size={13} />
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       </section>
-      <section className="section section-muted">
-        <div className="section-heading"><div><p className="overline">Featured deals</p><h2>Featured surplus listings</h2></div><Link to="/browse">Explore all listings →</Link></div>
-        <div className="listing-grid">{(data?.featuredListings ?? []).slice(0, 6).map((listing) => <ListingCard key={listing.id} listing={listing} />)}</div>
+
+      {/* Featured Lots (Zero Images) */}
+      <section className="section" style={{ background: "var(--muted)", borderTop: "2px solid var(--border)", borderBottom: "2px solid var(--border)" }}>
+        <div className="section-inner">
+          <div className="section-header-bar">
+            <div>
+              <h2 className="section-title-serif">Prime Liquidation Lots</h2>
+              <p className="section-subtitle-mono">
+                Available for immediate yard inspection, sampling, and truckload dispatch
+              </p>
+            </div>
+            <Link className="button primary tiny" to="/browse">
+              View All Lots
+            </Link>
+          </div>
+
+          <div className="listing-mono-grid">
+            {(data?.featuredListings ?? []).slice(0, 6).map((listing) => (
+              <ListingCard key={listing.id} listing={listing} />
+            ))}
+          </div>
+        </div>
       </section>
-      <section className="section"><div className="section-heading"><div><p className="overline">Simple and direct</p><h2>How it works</h2></div></div><div className="steps-grid">{[["01", "Verify your business", "Create an account and let counterparties know who they are buying from."], ["02", "List or find stock", "Post available surplus or filter inventory by category and location."], ["03", "Negotiate directly", "Make offers, respond with counter-offers, and agree on a fair price."], ["04", "Confirm the deal", "Coordinate payment and pickup directly with the other business."]].map(([number, title, text]) => <article className="step-card" key={number}><span>{number}</span><h3>{title}</h3><p>{text}</p></article>)}</div></section>
+
+      {/* Inverted RFQ Banner (Bold Choice #5 & #10) */}
+      <div className="section-inner">
+        <div className="mono-rfq-banner">
+          <div className="rfq-text-group">
+            <h3>Liquidate Dormant Factory Surplus or Raw Stock</h3>
+            <p>
+              Free locked capital from excess manufacturing raw inventory, off-gauge coils, or canceled client orders. Connect with verified commercial buyers within 48 hours.
+            </p>
+          </div>
+          <div className="rfq-buttons-group">
+            <Link className="button primary large" to="/seller/listings/new">
+              Post Surplus Lot
+            </Link>
+            <Link className="button secondary large" to="/browse">
+              Browse Requests
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Operational Protocol (Four Tenets) */}
+      <section className="section">
+        <div className="section-inner">
+          <div className="section-header-bar">
+            <div>
+              <h2 className="section-title-serif">Operational Protocol</h2>
+              <p className="section-subtitle-mono">
+                Four classical tenets governing corporate counterparty trade
+              </p>
+            </div>
+          </div>
+
+          <div className="mono-tenets-grid">
+            {[
+              ["I", "Corporate Accreditation", "Every enterprise submits audited GST & Tax ID documentation prior to accessing bid terminals."],
+              ["II", "Physical Yard Indexing", "Lots catalog physical SKU coordinates, unit weights, mill test certs, and warehouse inspection windows."],
+              ["III", "Direct Counter-Offer", "Commercial buyers propose unit pricing. Sellers accept, reject, or issue counter proposals in real time."],
+              ["IV", "Yard Dispatch & Release", "Upon mutual price acceptance, invoice settlements and physical yard truckload loading proceed directly."],
+            ].map(([num, title, text]) => (
+              <div className="tenet-cell" key={num}>
+                <span className="tenet-roman">{num}.</span>
+                <h4 className="tenet-title">{title}</h4>
+                <p className="tenet-body">{text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
     </PageState>
   );
 }
 
-function SearchBox({ initialQuery = "", initialLocation = "" }) {
-  const navigate = useNavigate();
-  const [query, setQuery] = useState(initialQuery);
-  const [location, setLocation] = useState(initialLocation);
-  useEffect(() => { setQuery(initialQuery); setLocation(initialLocation); }, [initialQuery, initialLocation]);
-  const submit = (event) => {
-    event.preventDefault();
-    const params = new URLSearchParams();
-    if (query.trim()) params.set("query", query.trim());
-    if (location.trim()) params.set("location", location.trim());
-    navigate(`/browse${params.size ? `?${params}` : ""}`);
-  };
-  return <form className="search-box" onSubmit={submit}><label><span aria-hidden="true">⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Item, material, or specs" aria-label="Search by keyword" /></label><label><span aria-hidden="true">⌖</span><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City or state" aria-label="Filter by location" /></label><button className="button primary">Search deals</button></form>;
-}
-
-function Stat({ label, value }) {
-  return <div className="stat-box"><strong>{value}</strong><span>{label}</span></div>;
-}
-
+/* ==========================================================================
+   Browse Page: Monograph Filter & Technical Grid
+   ========================================================================== */
 function BrowsePage() {
   const [params, setParams] = useSearchParams();
   const query = params.get("query") || "";
   const location = params.get("location") || "";
   const categoryId = params.get("categoryId") || "";
   const discountTier = params.get("discountTier") || "";
+
   const { data: loadedCategories, error: categoriesError } = useLoad(() => api("/api/categories"));
   const categories = loadedCategories || [];
+
   const [form, setForm] = useState({ query, location, categoryId, discountTier });
+
   const searchQuery = new URLSearchParams();
   if (query) searchQuery.set("query", query);
   if (location) searchQuery.set("location", location);
   if (categoryId) searchQuery.set("categoryId", categoryId);
-  const discountRanges = { "10-24": [10, 24], "25-49": [25, 49], "50+": [50, 100] };
-  const { data: rawListings, error, loading } = useLoad(() => api(`/api/listings${searchQuery.size ? `?${searchQuery}` : ""}`), [query, location, categoryId]);
-  const listings = discountRanges[discountTier]
-    ? (rawListings || []).filter((listing) => listing.discountPercentage >= discountRanges[discountTier][0] && listing.discountPercentage <= discountRanges[discountTier][1])
-    : rawListings;
+
+  const discountRanges = {
+    "10-24": [10, 24],
+    "25-49": [25, 49],
+    "50+": [50, 100],
+  };
+
+  const { data: rawListings, error, loading } = useLoad(
+    () => api(`/api/listings${searchQuery.size ? `?${searchQuery}` : ""}`),
+    [query, location, categoryId]
+  );
+
+  const listings = useMemo(() => {
+    let items = rawListings || [];
+    if (discountRanges[discountTier]) {
+      const [min, max] = discountRanges[discountTier];
+      items = items.filter(
+        (listing) => listing.discountPercentage >= min && listing.discountPercentage <= max
+      );
+    }
+    return items;
+  }, [rawListings, discountTier]);
 
   useEffect(() => {
     setForm({ query, location, categoryId, discountTier });
   }, [query, location, categoryId, discountTier]);
 
-  const apply = (event) => {
-    event.preventDefault();
+  const applyFilters = (nextForm = form) => {
     const next = new URLSearchParams();
-    if (form.query.trim()) next.set("query", form.query.trim());
-    if (form.location) next.set("location", form.location);
-    if (form.categoryId) next.set("categoryId", form.categoryId);
-    if (form.discountTier) next.set("discountTier", form.discountTier);
+    if (nextForm.query.trim()) next.set("query", nextForm.query.trim());
+    if (nextForm.location.trim()) next.set("location", nextForm.location.trim());
+    if (nextForm.categoryId) next.set("categoryId", nextForm.categoryId);
+    if (nextForm.discountTier) next.set("discountTier", nextForm.discountTier);
     setParams(next);
   };
 
-  return <div className="page-container">
-    <div className="page-heading"><div><p className="overline">The marketplace</p><h1>Browse surplus inventory</h1><p>Discover discounted industrial materials, surplus equipment, and warehouse lots.</p></div></div>
-    <SearchBox initialQuery={query} initialLocation={location} />
-    <div className="browse-layout">
-      <aside className="filter-panel"><div className="filter-title"><h2>Filters</h2><button className="text-button" onClick={() => setParams({})}>Clear all</button></div>
-        {categoriesError && <Notice message={`Could not load categories: ${categoriesError}`} kind="error" />}
-        <form onSubmit={apply}>
-          <label className="field-label">Keywords<input className="input" value={form.query} onChange={(e) => setForm({ ...form, query: e.target.value })} placeholder="Title, material, specs..." /></label>
-          <label className="field-label">City or state<input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g. Pune or Maharashtra" /></label>
-          <label className="field-label">Discount tier<select className="input" value={form.discountTier} onChange={(e) => setForm({ ...form, discountTier: e.target.value })}><option value="">Any discount</option><option value="10-24">10% – 24%</option><option value="25-49">25% – 49%</option><option value="50+">50% or more</option></select></label>
-          <fieldset className="category-filter"><legend>Category</legend><button type="button" className={!form.categoryId ? "filter-choice selected" : "filter-choice"} onClick={() => setForm({ ...form, categoryId: "" })}>All categories</button>{categories.map((item) => <button type="button" key={item.id} className={String(item.id) === String(form.categoryId) ? "filter-choice selected" : "filter-choice"} onClick={() => setForm({ ...form, categoryId: String(item.id) })}>{item.title}</button>)}</fieldset>
-          <button className="button primary full-width">Apply filters</button>
-        </form>
-      </aside>
-      <section className="results">
-        <PageState loading={loading} error={error}>
-          <div className="results-heading"><span><strong>{listings?.length ?? 0}</strong> available items</span></div>
-          {listings?.length ? <div className="listing-grid">{listings.map((listing) => <ListingCard key={listing.id} listing={listing} />)}</div> : <div className="empty-state"><span>▧</span><h2>No surplus items found</h2><p>Try changing your keywords, location, or category.</p><button className="button secondary" onClick={() => setParams({})}>Reset filters</button></div>}
-        </PageState>
-      </section>
+  const setCategoryFilter = (id) => {
+    const nextForm = { ...form, categoryId: id === form.categoryId ? "" : id };
+    setForm(nextForm);
+    applyFilters(nextForm);
+  };
+
+  const setDiscountFilter = (tier) => {
+    const nextForm = { ...form, discountTier: tier === form.discountTier ? "" : tier };
+    setForm(nextForm);
+    applyFilters(nextForm);
+  };
+
+  const resetFilters = () => {
+    setForm({ query: "", location: "", categoryId: "", discountTier: "" });
+    setParams({});
+  };
+
+  return (
+    <div className="page-container">
+      <div className="section-header-bar" style={{ marginBottom: "32px" }}>
+        <div>
+          <h1 className="section-title-serif">Surplus Inventory Index</h1>
+          <p className="section-subtitle-mono">
+            Direct acquisition of secondary raw materials, overruns, and dormant factory stocks
+          </p>
+        </div>
+        <Link to="/seller/listings/new" className="button primary tiny">
+          + Post Surplus Lot
+        </Link>
+      </div>
+
+      <div className="browse-mono-layout">
+        {/* Monograph Filter Sidebar */}
+        <aside className="filter-mono-card">
+          <div className="filter-heading-group">
+            <span className="filter-title-mono">Refine Index</span>
+            <button className="button subtle tiny" onClick={resetFilters}>
+              Reset
+            </button>
+          </div>
+
+          {categoriesError && <Notice message={categoriesError} kind="error" />}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              applyFilters();
+            }}
+            style={{ display: "flex", flexDirection: "column", gap: "20px" }}
+          >
+            <div>
+              <label className="filter-section-title">Keyword or Grade</label>
+              <input
+                className="filter-input-mono"
+                value={form.query}
+                onChange={(e) => setForm({ ...form, query: e.target.value })}
+                placeholder="Grade, metallurgy, SKU..."
+              />
+            </div>
+
+            <div>
+              <label className="filter-section-title">Yard Location</label>
+              <input
+                className="filter-input-mono"
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                placeholder="City or State..."
+              />
+            </div>
+
+            <div>
+              <label className="filter-section-title">Price Reduction Tier</label>
+              <div>
+                {[
+                  ["", "All Available Lots"],
+                  ["10-24", "10% – 24% Off Par"],
+                  ["25-49", "25% – 49% Off Par"],
+                  ["50+", "50%+ Deep Liquidation"],
+                ].map(([tier, label]) => (
+                  <button
+                    key={tier}
+                    type="button"
+                    className={`filter-choice-btn ${form.discountTier === tier ? "selected" : ""}`}
+                    onClick={() => setDiscountFilter(tier)}
+                  >
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="filter-section-title">Classification</label>
+              <div style={{ maxHeight: "260px", overflowY: "auto" }}>
+                <button
+                  type="button"
+                  className={`filter-choice-btn ${!form.categoryId ? "selected" : ""}`}
+                  onClick={() => setCategoryFilter("")}
+                >
+                  <span>All Categories</span>
+                </button>
+                {categories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={`filter-choice-btn ${String(cat.id) === String(form.categoryId) ? "selected" : ""}`}
+                    onClick={() => setCategoryFilter(String(cat.id))}
+                  >
+                    <span>{cat.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button className="button primary full-width" type="submit">
+              Apply Specifications
+            </button>
+          </form>
+        </aside>
+
+        {/* Results Stream */}
+        <section style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", paddingBottom: "12px", borderBottom: "1.5px solid var(--border)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              {listings?.length ?? 0} Lots Cataloged
+            </span>
+          </div>
+
+          <PageState loading={loading} error={error}>
+            {listings?.length ? (
+              <div className="listing-mono-grid">
+                {listings.map((listing) => (
+                  <ListingCard key={listing.id} listing={listing} />
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: "64px 32px", textAlign: "center", border: "2px solid var(--border)", background: "var(--background)" }}>
+                <h3 className="section-title-serif" style={{ fontSize: "1.8rem", marginBottom: "12px" }}>
+                  No Material Lots Matched
+                </h3>
+                <p style={{ color: "var(--muted-foreground)", fontSize: "14px", maxWidth: "420px", margin: "0 auto 24px" }}>
+                  Broaden your parameters, select an alternative classification, or clear filters.
+                </p>
+                <button className="button secondary" onClick={resetFilters}>
+                  Clear All Filters
+                </button>
+              </div>
+            )}
+          </PageState>
+        </section>
+      </div>
     </div>
-  </div>;
+  );
 }
 
+/* ==========================================================================
+   Listing Detail Page: ZERO IMAGES · ARCHITECTURAL SPECIFICATION SHEET
+   ========================================================================== */
 function ListingDetailPage() {
   const { id } = useParams();
   const { data: listing, error, loading } = useLoad(() => api(`/api/listings/${id}`), [id]);
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [notice, setNotice] = useState("");
   const [noticeKind, setNoticeKind] = useState("success");
   const [busy, setBusy] = useState(false);
-  if (loading || error || !listing) return <PageState loading={loading} error={error}>{null}</PageState>;
+
+  const [offerPrice, setOfferPrice] = useState("");
+  const [offerQty, setOfferQty] = useState(1);
+
+  useEffect(() => {
+    if (listing) {
+      setOfferPrice(listing.price);
+      setOfferQty(Math.min(listing.quantity, 1));
+    }
+  }, [listing]);
+
+  if (loading || error || !listing) {
+    return (
+      <div className="page-container">
+        <PageState loading={loading} error={error} />
+      </div>
+    );
+  }
+
+  const discount = listing.discountPercentage ?? 0;
+  const totalOfferVal = (Number(offerPrice) || 0) * (Number(offerQty) || 0);
+
   const makeOffer = async (event) => {
     event.preventDefault();
     setBusy(true);
     const data = new FormData(event.currentTarget);
     try {
-      await api("/api/offers", { method: "POST", body: JSON.stringify({ listingId: listing.id, offerPrice: Number(data.get("offerPrice")), quantity: Number(data.get("quantity")), buyerMessage: data.get("buyerMessage") }) });
-      setNotice("Your offer has been sent to the seller.");
+      await api("/api/offers", {
+        method: "POST",
+        body: JSON.stringify({
+          listingId: listing.id,
+          offerPrice: Number(data.get("offerPrice")),
+          quantity: Number(data.get("quantity")),
+          buyerMessage: data.get("buyerMessage"),
+        }),
+      });
+      setNotice("Your commercial offer proposal has been formally dispatched to the seller.");
+      setNoticeKind("success");
     } catch (reason) {
       setNotice(reason.message);
       setNoticeKind("error");
-    } finally { setBusy(false); }
-  };
-  return <div className="page-container">
-    <div className="breadcrumbs"><Link to="/">Home</Link><span>/</span><Link to="/browse">Marketplace</Link><span>/</span><span>{listing.category?.title}</span></div>
-    <Notice message={notice} kind={noticeKind} onClose={() => setNotice("")} />
-    <div className="detail-layout">
-      <section>
-        <div className="detail-image"><img src={imageUrl(listing.imageUrl)} alt={listing.title} onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/images/listing-placeholder.svg"; }} /></div>
-        <div className="panel detail-description"><div className="detail-labels"><span className="tag">{listing.category?.title}</span><span className={`status ${listing.status}`}>{statusLabels[listing.status] || listing.status}</span></div>{listing.tags?.includes("Demo sample") && <span className="demo-badge">DEMO INVENTORY · SAMPLE DATA</span>}<h1>{listing.title}</h1><p>{listing.description}</p>{listing.tags?.length > 0 && <div className="listing-tags">{listing.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>}<dl className="spec-list"><div><dt>SKU</dt><dd>{listing.sku || "—"}</dd></div><div><dt>Condition</dt><dd>{conditionLabels[listing.condition] || listing.condition}</dd></div><div><dt>Available quantity</dt><dd>{listing.quantity} {listing.unit}</dd></div><div><dt>Pickup location</dt><dd>{listing.location}</dd></div><div><dt>Expiry / obsolescence</dt><dd>{listing.expiryDate || "Not specified"}</dd></div><div><dt>Listing ID</dt><dd>LOT-{listing.id}</dd></div><div><dt>Posted</dt><dd>{listing.createdAt ? new Date(listing.createdAt).toLocaleDateString("en-IN") : "—"}</dd></div></dl></div>
-      </section>
-      <aside>
-        <div className="panel offer-panel"><div className="price-heading"><span>Surplus price</span><span className="discount-badge">{listing.discountPercentage ?? 0}% discount</span></div><div className="detail-price"><strong>{formatMoney(listing.price)}</strong><del>{formatMoney(listing.originalPrice)}</del></div><p className="muted">Per {listing.unit}. Confirm taxes and delivery terms with the seller.</p><hr />
-          {listing.status !== "AVAILABLE" && listing.status !== "UNDER_NEGOTIATION" ? <p className="notice info">This listing is no longer available.</p> : user?.role === "BUYER" ? <form onSubmit={makeOffer} className="stack-form"><h2>Make an offer</h2><label className="field-label">Price per {listing.unit}<input className="input" name="offerPrice" type="number" min="0.01" step="0.01" defaultValue={listing.price} required /></label><label className="field-label">Quantity (max {listing.quantity})<input className="input" name="quantity" type="number" min="1" max={listing.quantity} defaultValue={Math.min(listing.quantity, 1)} required /></label><label className="field-label">Message to seller<textarea className="input" name="buyerMessage" rows="3" maxLength="1000" placeholder="Share pickup timing or your proposal" /></label><button className="button primary full-width" disabled={busy}>{busy ? "Sending…" : "Submit purchase offer"}</button></form> : user?.role === "SELLER" ? <p className="notice info">Sign in with a buyer account to make an offer.</p> : <div><Link className="button primary full-width" to="/login">Sign in to make an offer</Link><p className="muted text-center">Verified businesses can negotiate directly.</p></div>}
-        </div>
-        <div className="panel seller-panel"><h2>Seller business</h2><strong>{listing.seller?.businessProfile?.companyName || listing.seller?.fullName || "Verified business"}</strong><p>{listing.seller?.businessProfile?.city ? `${listing.seller.businessProfile.city}, ${listing.seller.businessProfile.state}` : listing.location}</p></div>
-        <ListingReportAction listing={listing} user={user} onReported={(message) => setNotice(message)} />
-      </aside>
-    </div>
-  </div>;
-}
-
-function ListingReportAction({ listing, user, onReported }) {
-  const [open, setOpen] = useState(false);
-  const [reason, setReason] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const canReport = ["BUYER", "SELLER"].includes(user?.role) && user.id !== listing.seller?.id;
-  if (!canReport) return null;
-  const submit = async (event) => {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      await api(`/api/listings/${listing.id}/reports`, { method: "POST", body: JSON.stringify({ reason }) });
-      setOpen(false);
-      setReason("");
-      onReported("Thanks. Your report has been sent to the moderation team.");
-    } catch (reason) {
-      setError(reason.message);
     } finally {
       setBusy(false);
     }
   };
-  return <div className="listing-report">
-    {!open ? <button className="text-button" type="button" onClick={() => setOpen(true)}>Report this listing</button> : <form className="stack-form" onSubmit={submit}>
-      <label className="field-label">Why should this listing be reviewed?<textarea className="input" value={reason} onChange={(event) => setReason(event.target.value)} maxLength="1000" rows="3" required /></label>
-      <Notice message={error} kind="error" onClose={() => setError("")} />
-      <div className="action-row"><button className="button tiny secondary" type="button" onClick={() => setOpen(false)}>Cancel</button><button className="button tiny danger" disabled={busy || !reason.trim()}>{busy ? "Sending…" : "Submit report"}</button></div>
-    </form>}
-  </div>;
+
+  return (
+    <div className="page-container">
+      {/* Editorial Breadcrumbs */}
+      <div className="editorial-breadcrumbs">
+        <Link to="/">Index</Link>
+        <span>/</span>
+        <Link to="/browse">Marketplace</Link>
+        <span>/</span>
+        <Link to={`/browse?categoryId=${listing.category?.id}`}>{listing.category?.title}</Link>
+        <span>/</span>
+        <span style={{ color: "var(--foreground)", fontWeight: 700 }}>LOT-{listing.id}</span>
+      </div>
+
+      <Notice message={notice} kind={noticeKind} onClose={() => setNotice("")} />
+
+      <div className="detail-mono-layout">
+        {/* Left: Architectural Technical Manifest Sheet (NO PHOTOS) */}
+        <div>
+          <div className="detail-technical-sheet">
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginBottom: "16px" }}>
+              <span className="stamp-sku">{listing.sku || `LOT-${listing.id}`}</span>
+              <span className={`status-stamp ${listing.status}`}>{statusLabels[listing.status] || listing.status}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                {conditionLabels[listing.condition] || listing.condition}
+              </span>
+            </div>
+
+            <h1 className="detail-heading-serif">{listing.title}</h1>
+
+            {/* Boxed Drop Cap on first description paragraph (Bold Choice #11) */}
+            <p className="detail-body-text boxed-drop-cap">{listing.description}</p>
+
+            <table className="specs-editorial-table">
+              <tbody>
+                <tr>
+                  <td className="key">Catalog SKU</td>
+                  <td className="val" style={{ fontFamily: "var(--font-mono)" }}>
+                    {listing.sku || `SKU-LOT-${listing.id}`}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="key">Industrial Classification</td>
+                  <td className="val">{listing.category?.title}</td>
+                </tr>
+                <tr>
+                  <td className="key">Surplus Condition</td>
+                  <td className="val">{conditionLabels[listing.condition] || listing.condition}</td>
+                </tr>
+                <tr>
+                  <td className="key">Available Quantity</td>
+                  <td className="val">{listing.quantity} {listing.unit}</td>
+                </tr>
+                <tr>
+                  <td className="key">Inspection &amp; Pickup Yard</td>
+                  <td className="val">
+                    <IconMapPin size={14} style={{ verticalAlign: "middle", marginRight: "4px" }} />
+                    {listing.location}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="key">Obsolescence / Date</td>
+                  <td className="val">{listing.expiryDate || "Non-perishable industrial stock"}</td>
+                </tr>
+                <tr>
+                  <td className="key">Date Cataloged</td>
+                  <td className="val">
+                    {listing.createdAt ? new Date(listing.createdAt).toLocaleDateString("en-IN") : "—"}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Right: Negotiation Console */}
+        <aside>
+          <div className="negotiation-terminal">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "11.5px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                Surplus Valuation
+              </span>
+              {discount > 0 && (
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 700, background: "var(--foreground)", color: "var(--background)", padding: "2px 6px" }}>
+                  {discount}% Below Par
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "baseline", gap: "12px", marginBottom: "8px" }}>
+              <span style={{ fontFamily: "var(--font-serif)", fontSize: "32px", fontWeight: 900 }}>
+                {formatMoney(listing.price)}
+              </span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "14px", color: "var(--muted-foreground)", textDecoration: "line-through" }}>
+                {formatMoney(listing.originalPrice)}
+              </span>
+            </div>
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "13.5px", color: "var(--muted-foreground)", marginBottom: "24px" }}>
+              Ex-yard valuation per {listing.unit}. Direct counter-offer settlement on verified tax invoice.
+            </p>
+
+            {listing.status !== "AVAILABLE" && listing.status !== "UNDER_NEGOTIATION" ? (
+              <div className="editorial-notice">This surplus lot has concluded its negotiation window.</div>
+            ) : user?.role === "BUYER" ? (
+              <form onSubmit={makeOffer} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                  Submit Formal Price Proposal
+                </span>
+                <div>
+                  <label className="field-label-mono">Target Price Per {listing.unit} (₹)</label>
+                  <input
+                    className="editorial-input"
+                    name="offerPrice"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={offerPrice}
+                    onChange={(e) => setOfferPrice(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="field-label-mono">Requested Lot Quantity (Max {listing.quantity})</label>
+                  <input
+                    className="editorial-input"
+                    name="quantity"
+                    type="number"
+                    min="1"
+                    max={listing.quantity}
+                    value={offerQty}
+                    onChange={(e) => setOfferQty(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div style={{ padding: "14px", background: "var(--muted)", border: "1.5px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", textTransform: "uppercase" }}>Total Proposal</span>
+                  <strong style={{ fontFamily: "var(--font-serif)", fontSize: "1.3rem" }}>
+                    {formatMoney(totalOfferVal)}
+                  </strong>
+                </div>
+
+                <div>
+                  <label className="field-label-mono">Logistics &amp; Yard Terms</label>
+                  <textarea
+                    className="editorial-input"
+                    name="buyerMessage"
+                    rows="3"
+                    placeholder="e.g. Can dispatch flatbed trucks for Friday morning loading."
+                  />
+                </div>
+
+                <button className="button primary full-width large" disabled={busy}>
+                  {busy ? "Submitting…" : "Dispatch Formal Offer →"}
+                </button>
+              </form>
+            ) : user?.role === "SELLER" ? (
+              <div className="editorial-notice">
+                You are currently authenticated as a seller. Sign in with a verified buyer account to propose offers.
+              </div>
+            ) : (
+              <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <Link className="button primary full-width large" to="/login">
+                  Sign In to Negotiate
+                </Link>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--muted-foreground)" }}>
+                  Accredited enterprises trade and counter-offer directly.
+                </span>
+              </div>
+            )}
+
+            <div style={{ marginTop: "28px", paddingTop: "20px", borderTop: "1.5px solid var(--border)" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "10.5px", textTransform: "uppercase", letterSpacing: "0.1em", display: "block", color: "var(--muted-foreground)", marginBottom: "4px" }}>
+                Selling Counterparty
+              </span>
+              <strong style={{ fontFamily: "var(--font-serif)", fontSize: "16px", display: "block" }}>
+                {listing.seller?.businessProfile?.companyName || listing.seller?.fullName || "Verified Mill / Enterprise"}
+              </strong>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--muted-foreground)" }}>
+                {listing.seller?.businessProfile?.city
+                  ? `${listing.seller.businessProfile.city}, ${listing.seller.businessProfile.state}`
+                  : listing.location} · 100% GST Verified
+              </span>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
 }
 
+/* ==========================================================================
+   Login Page: 1-Click Demo Accounts & Minimalist Monograph Auth
+   ========================================================================== */
 function LoginPage() {
   const { refreshUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const autofill = (demoEmail, demoPassword) => {
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+  };
+
   const submit = async (event) => {
-    event.preventDefault(); setError(""); setBusy(true);
-    const values = new FormData(event.currentTarget);
+    event.preventDefault();
+    setError("");
+    setBusy(true);
     try {
-      await api("/api/auth/login", { method: "POST", body: JSON.stringify({ email: values.get("email"), password: values.get("password") }) });
+      await api("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
       const user = await refreshUser();
       navigate(roleHome(user?.role), { replace: true });
-    } catch (reason) { setError(reason.message); } finally { setBusy(false); }
+    } catch (reason) {
+      setError(reason.message);
+    } finally {
+      setBusy(false);
+    }
   };
-  return <AuthPage title="Welcome back" subtitle="Sign in to manage your surplus deals"><Notice message={location.state?.message} onClose={() => navigate("/login", { replace: true, state: null })} /><Notice message={error} kind="error" onClose={() => setError("")} /><form className="stack-form" onSubmit={submit}><label className="field-label">Business email<input className="input" name="email" type="email" autoComplete="email" required /></label><label className="field-label">Password<input className="input" name="password" type="password" autoComplete="current-password" required /></label><button className="button primary full-width" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button><p className="muted text-center">New here? <Link to="/register">Create a business account</Link></p></form></AuthPage>;
+
+  return (
+    <div className="editorial-auth-box">
+      <div style={{ textAlign: "center", marginBottom: "28px" }}>
+        <div className="brand-text-main" style={{ fontSize: "1.35rem", justifyContent: "center", marginBottom: "6px" }}>
+          b2b dead stock marketplace
+        </div>
+        <p style={{ fontFamily: "var(--font-body)", color: "var(--muted-foreground)", fontSize: "14px" }}>
+          Access your verified commercial trading workspace
+        </p>
+      </div>
+
+      {/* 1-Click Demo Credentials */}
+      <div style={{ padding: "16px", background: "var(--muted)", border: "1px solid var(--border)", marginBottom: "24px" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", display: "block", marginBottom: "10px" }}>
+          Instant Demo Access:
+        </span>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+          <button
+            type="button"
+            className="button secondary tiny"
+            onClick={() => autofill("seller@metrosteel.com", "password123")}
+          >
+            Seller (Metro Steel)
+          </button>
+          <button
+            type="button"
+            className="button secondary tiny"
+            onClick={() => autofill("buyer@apexbuild.com", "password123")}
+          >
+            Buyer (Apex Builders)
+          </button>
+          <button
+            type="button"
+            className="button secondary tiny"
+            onClick={() => autofill("admin@deadstock.com", "password123")}
+          >
+            Admin Ops
+          </button>
+        </div>
+      </div>
+
+      <Notice message={location.state?.message} onClose={() => navigate("/login", { replace: true, state: null })} />
+      <Notice message={error} kind="error" onClose={() => setError("")} />
+
+      <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+        <div>
+          <label className="field-label-mono">Corporate Email</label>
+          <input
+            className="editorial-input"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="corporate@enterprise.com"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="field-label-mono">Password</label>
+          <input
+            className="editorial-input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+          />
+        </div>
+
+        <button className="button primary full-width large" disabled={busy}>
+          {busy ? "Authenticating…" : "Authenticate & Enter →"}
+        </button>
+
+        <p style={{ textAlign: "center", fontSize: "13px", color: "var(--muted-foreground)", marginTop: "12px" }}>
+          Unregistered enterprise?{" "}
+          <Link to="/register" style={{ color: "var(--foreground)", textDecoration: "underline", fontWeight: 600 }}>
+            Submit corporate registration
+          </Link>
+        </p>
+      </form>
+    </div>
+  );
 }
 
+/* ==========================================================================
+   Register Page: Corporate Accreditation
+   ========================================================================== */
 function RegisterPage() {
   const navigate = useNavigate();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
   const submit = async (event) => {
-    event.preventDefault(); setError(""); setBusy(true);
+    event.preventDefault();
+    setError("");
+    setBusy(true);
     const values = Object.fromEntries(new FormData(event.currentTarget).entries());
     try {
-      await api("/api/auth/register", { method: "POST", body: JSON.stringify({ ...values, role: values.role, postalCode: values.postalCode || null }) });
-      navigate("/login?registered=1", { state: { message: "Account created. Sign in to continue." } });
-    } catch (reason) { setError(reason.message); } finally { setBusy(false); }
+      await api("/api/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ ...values, role: values.role, postalCode: values.postalCode || null }),
+      });
+      navigate("/login?registered=1", {
+        state: { message: "Corporate account established. Please sign in." },
+      });
+    } catch (reason) {
+      setError(reason.message);
+    } finally {
+      setBusy(false);
+    }
   };
-  return <AuthPage title="Join the marketplace" subtitle="Register your business to buy or sell surplus"><Notice message={error} kind="error" onClose={() => setError("")} /><form className="form-grid" onSubmit={submit}>
-    <label className="field-label">Full name<input className="input" name="fullName" required /></label><label className="field-label">Business email<input className="input" name="email" type="email" autoComplete="email" required /></label><label className="field-label">Password<input className="input" name="password" type="password" minLength="6" autoComplete="new-password" required /></label><label className="field-label">Account type<select className="input" name="role"><option value="BUYER">Buyer</option><option value="SELLER">Seller</option></select></label><label className="field-label">Business name<input className="input" name="companyName" required /></label><label className="field-label">GST / Tax ID<input className="input" name="taxId" required /></label><label className="field-label span-two">Business address<input className="input" name="address" required /></label><label className="field-label">City<input className="input" name="city" required /></label><label className="field-label">State<input className="input" name="state" required /></label><label className="field-label">Postal code<input className="input" name="postalCode" /></label><label className="field-label">Phone<input className="input" name="phone" type="tel" required /></label><label className="field-label span-two">Industry<input className="input" name="industryType" /></label><button className="button primary full-width span-two" disabled={busy}>{busy ? "Creating account…" : "Create account"}</button><p className="muted text-center span-two">Already registered? <Link to="/login">Sign in</Link></p>
-  </form></AuthPage>;
-}
 
-function AuthPage({ title, subtitle, children }) {
-  return <div className="auth-background"><section className="auth-card"><Link className="brand auth-brand" to="/"><span className="brand-icon">◇</span><strong>B2B marketplace</strong></Link><h1>{title}</h1><p className="muted">{subtitle}</p>{children}</section></div>;
+  return (
+    <div className="editorial-auth-box" style={{ maxWidth: "680px" }}>
+      <div style={{ textAlign: "center", marginBottom: "28px" }}>
+        <div className="brand-text-main" style={{ fontSize: "1.35rem", justifyContent: "center", marginBottom: "6px" }}>
+          b2b dead stock marketplace
+        </div>
+        <p style={{ fontFamily: "var(--font-body)", color: "var(--muted-foreground)", fontSize: "14px" }}>
+          Corporate Registration &amp; Accreditation
+        </p>
+      </div>
+
+      <Notice message={error} kind="error" onClose={() => setError("")} />
+
+      <form onSubmit={submit} style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
+        <div>
+          <label className="field-label-mono">Full Contact Name</label>
+          <input className="editorial-input" name="fullName" placeholder="e.g. Rajesh Mehta" required />
+        </div>
+
+        <div>
+          <label className="field-label-mono">Corporate Email</label>
+          <input className="editorial-input" name="email" type="email" placeholder="name@company.com" required />
+        </div>
+
+        <div>
+          <label className="field-label-mono">Account Password</label>
+          <input className="editorial-input" name="password" type="password" minLength="6" required />
+        </div>
+
+        <div>
+          <label className="field-label-mono">Commercial Trading Role</label>
+          <select className="editorial-input" name="role">
+            <option value="BUYER">Buyer (Source Discounted Materials)</option>
+            <option value="SELLER">Seller (Liquidate Surplus &amp; Dead Stock)</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="field-label-mono">Legal Business Name</label>
+          <input className="editorial-input" name="companyName" placeholder="e.g. Apex Industrial Fabricators" required />
+        </div>
+
+        <div>
+          <label className="field-label-mono">GST / Tax Identification ID</label>
+          <input className="editorial-input" name="taxId" placeholder="e.g. 27ABCDE1234F1Z5" required />
+        </div>
+
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label className="field-label-mono">Registered Office / Storage Yard Address</label>
+          <input className="editorial-input" name="address" placeholder="Industrial Area, Plot Number..." required />
+        </div>
+
+        <div>
+          <label className="field-label-mono">City</label>
+          <input className="editorial-input" name="city" placeholder="e.g. Ahmedabad" required />
+        </div>
+
+        <div>
+          <label className="field-label-mono">State</label>
+          <input className="editorial-input" name="state" placeholder="e.g. Gujarat" required />
+        </div>
+
+        <div>
+          <label className="field-label-mono">Postal Code</label>
+          <input className="editorial-input" name="postalCode" placeholder="e.g. 382445" />
+        </div>
+
+        <div>
+          <label className="field-label-mono">Commercial Phone</label>
+          <input className="editorial-input" name="phone" type="tel" placeholder="+91 98765 00000" required />
+        </div>
+
+        <div style={{ gridColumn: "1 / -1", marginTop: "14px" }}>
+          <button className="button primary full-width large" disabled={busy}>
+            {busy ? "Registering…" : "Complete Corporate Accreditation →"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function RequireRole({ roles, children }) {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+
   useEffect(() => {
     if (!loading && !user) navigate("/login", { replace: true });
     else if (!loading && user && !roles.includes(user.role)) navigate(roleHome(user.role), { replace: true });
   }, [user, loading, roles, navigate]);
-  if (loading || !user || !roles.includes(user.role)) return <div className="page-state"><span className="spinner" /> Checking access…</div>;
+
+  if (loading || !user || !roles.includes(user.role)) {
+    return (
+      <div style={{ textAlign: "center", padding: "100px 0" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", textTransform: "uppercase" }}>
+          Verifying Credentials…
+        </span>
+      </div>
+    );
+  }
   return children;
 }
 
+/* ==========================================================================
+   Dashboards (Buyer, Seller, Admin)
+   ========================================================================== */
 function DashboardPage({ role }) {
   const endpoint = role === "ADMIN" ? null : `/api/${role.toLowerCase()}/dashboard`;
-  const { data, error, loading, reload } = useLoad(() => endpoint ? api(endpoint) : Promise.resolve(null), [endpoint]);
+  const { data, error, loading, reload } = useLoad(() => (endpoint ? api(endpoint) : Promise.resolve(null)), [endpoint]);
   const { user } = useAuth();
-  return <RequireRole roles={[role]}><div className="page-container">
-    <div className="page-heading"><div><p className="overline">{role.toLowerCase()} workspace</p><h1>{role === "SELLER" ? "Seller dashboard" : role === "BUYER" ? "My offers" : "Platform administration"}</h1><p>Welcome back, {user?.fullName}.</p></div>{role === "SELLER" && <Link className="button primary" to="/seller/listings/new">＋ Post a listing</Link>}</div>
-    {role === "ADMIN" ? <AdminDashboard reload={() => {}} /> : <PageState loading={loading} error={error}>
-      {role === "BUYER" && data && <BuyerDashboard data={data} reload={reload} />}
-      {role === "SELLER" && data && <SellerDashboard data={data} reload={reload} />}
-    </PageState>}
-  </div></RequireRole>;
+
+  return (
+    <RequireRole roles={[role]}>
+      <div className="page-container">
+        <div className="section-header-bar" style={{ marginBottom: "32px" }}>
+          <div>
+            <h1 className="section-title-serif">
+              {role === "SELLER"
+                ? "Liquidation Ledger & Inventory"
+                : role === "BUYER"
+                ? "Sourcing Proposals & Purchases"
+                : "Exchange Governance"}
+            </h1>
+            <p className="section-subtitle-mono">
+              Accredited enterprise account: {user?.fullName} ({user?.businessProfile?.companyName || "Commercial User"})
+            </p>
+          </div>
+          {role === "SELLER" && (
+            <div style={{ display: "flex", gap: "10px" }}>
+              <Link className="button secondary tiny" to="/seller/listings/import">
+                <IconUpload size={14} /> Import CSV
+              </Link>
+              {/* Prominent Post Surplus Lot Button */}
+              <Link className="button primary tiny" to="/seller/listings/new">
+                + Post Surplus Lot
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {role === "ADMIN" ? (
+          <AdminDashboard reload={() => {}} />
+        ) : (
+          <PageState loading={loading} error={error}>
+            {role === "BUYER" && data && <BuyerDashboard data={data} reload={reload} />}
+            {role === "SELLER" && data && <SellerDashboard data={data} reload={reload} />}
+          </PageState>
+        )}
+      </div>
+    </RequireRole>
+  );
 }
 
 function BuyerDashboard({ data, reload }) {
   const purchases = data.offers.filter((offer) => offer.status === "ACCEPTED");
   const activeOffers = data.offers.filter((offer) => offer.status !== "ACCEPTED");
-  const exportPurchases = () => downloadCsv("purchase-history.csv",
-    ["Listing", "Seller", "SKU", "Agreed price", "Quantity", "Unit", "Total", "Status", "Confirmed"],
-    purchases.map((offer) => [offer.listing.title, offer.listing.seller?.fullName, offer.listing.sku,
-      offer.counterPrice || offer.offerPrice, offer.quantity, offer.listing.unit,
-      (offer.counterPrice || offer.offerPrice) * offer.quantity, offer.status, offer.updatedAt]));
-  return <><div className="dashboard-toolbar"><span className="muted">Negotiations and confirmed purchases</span><div className="action-row"><button className="button secondary" onClick={exportPurchases}>Export CSV</button><button className="button secondary" onClick={() => window.print()}>Print / Save PDF</button></div></div><div className="stats-grid dashboard-stats"><Stat label="My offers" value={data.offers.length} /><Stat label="Confirmed deals" value={data.acceptedOfferCount} /></div><h2 className="subheading">Purchase history</h2>{purchases.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Agreed price</th><th>Quantity</th><th>Confirmed</th></tr></thead><tbody>{purchases.map((offer) => <tr key={offer.id}><td><Link to={`/listings/${offer.listing.id}`}>{offer.listing.title}</Link><small>SKU {offer.listing.sku || "—"}</small></td><td>{offer.listing.seller?.fullName}</td><td>{formatMoney(offer.counterPrice || offer.offerPrice)}<small>Total {formatMoney((offer.counterPrice || offer.offerPrice) * offer.quantity)}</small></td><td>{offer.quantity} {offer.listing.unit}</td><td>{offer.updatedAt ? new Date(offer.updatedAt).toLocaleDateString("en-IN") : "—"}</td></tr>)}</tbody></table></div> : <div className="empty-inline">Accepted deals will appear here.</div>}<h2 className="subheading top-space">Open and past offers</h2>{activeOffers.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Your offer</th><th>Quantity</th><th>Seller response</th><th>Status</th><th>Actions</th></tr></thead><tbody>{activeOffers.map((offer) => <tr key={offer.id}><td><Link to={`/listings/${offer.listing.id}`}>{offer.listing.title}</Link></td><td>{offer.listing.seller?.fullName}</td><td>{formatMoney(offer.offerPrice)}<small>Total {formatMoney(offer.totalAmount)}</small></td><td>{offer.quantity} {offer.listing.unit}</td><td>{offer.counterPrice ? `${formatMoney(offer.counterPrice)} · ${offer.sellerMessage || ""}` : "—"}</td><td><Status value={offer.status} /></td><td><OfferActions offer={offer} role="BUYER" reload={reload} /></td></tr>)}</tbody></table></div> : data.offers.length === 0 && <EmptyState title="No offers yet" text="Browse the marketplace and make an offer on a surplus listing." link="/browse" linkText="Browse listings" />}</>;
+
+  const exportPurchases = () =>
+    downloadCsv(
+      "purchase-history.csv",
+      ["Listing", "Seller", "SKU", "Agreed Price", "Quantity", "Unit", "Total", "Status", "Date"],
+      purchases.map((offer) => [
+        offer.listing.title,
+        offer.listing.seller?.fullName,
+        offer.listing.sku,
+        offer.counterPrice || offer.offerPrice,
+        offer.quantity,
+        offer.listing.unit,
+        (offer.counterPrice || offer.offerPrice) * offer.quantity,
+        offer.status,
+        offer.updatedAt,
+      ])
+    );
+
+  return (
+    <>
+      <div className="mono-inverted-stats" style={{ marginBottom: "36px" }}>
+        <div className="stat-cell">
+          <div className="stat-number-serif">{activeOffers.length}</div>
+          <div className="stat-label-mono">Active Negotiations</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-number-serif">{purchases.length}</div>
+          <div className="stat-label-mono">Closed Purchases</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-number-serif">{data.offers.length}</div>
+          <div className="stat-label-mono">Total Submitted Proposals</div>
+        </div>
+        <div className="stat-cell" style={{ display: "flex", alignItems: "center" }}>
+          <button className="button secondary tiny" onClick={exportPurchases} style={{ background: "#FFFFFF", color: "#000000" }}>
+            <IconDownload size={14} /> Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: "16px" }}>
+        <h3 className="section-title-serif" style={{ fontSize: "1.35rem" }}>Confirmed Purchases</h3>
+      </div>
+
+      {purchases.length ? (
+        <div className="mono-table-wrapper" style={{ marginBottom: "36px" }}>
+          <table className="mono-table">
+            <thead>
+              <tr>
+                <th>Material Lot</th>
+                <th>Supplier</th>
+                <th>Settled Price</th>
+                <th>Quantity</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {purchases.map((offer) => (
+                <tr key={offer.id}>
+                  <td>
+                    <Link to={`/listings/${offer.listing.id}`} style={{ fontWeight: "700" }}>
+                      {offer.listing.title}
+                    </Link>
+                  </td>
+                  <td>{offer.listing.seller?.fullName}</td>
+                  <td>
+                    <strong>{formatMoney(offer.counterPrice || offer.offerPrice)}</strong>
+                  </td>
+                  <td>{offer.quantity} {offer.listing.unit}</td>
+                  <td>
+                    <span className={`status-stamp ${offer.status}`}>{offer.status}</span>
+                  </td>
+                  <td>{offer.updatedAt ? new Date(offer.updatedAt).toLocaleDateString("en-IN") : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ padding: "32px", border: "1.5px solid var(--border)", marginBottom: "36px", textAlign: "center" }}>
+          <p style={{ color: "var(--muted-foreground)" }}>No confirmed purchases recorded yet.</p>
+        </div>
+      )}
+
+      <div style={{ marginBottom: "16px" }}>
+        <h3 className="section-title-serif" style={{ fontSize: "1.35rem" }}>Active Purchase Proposals</h3>
+      </div>
+
+      {activeOffers.length ? (
+        <div className="mono-table-wrapper">
+          <table className="mono-table">
+            <thead>
+              <tr>
+                <th>Material Lot</th>
+                <th>Supplier</th>
+                <th>Offered Price</th>
+                <th>Quantity</th>
+                <th>Counter Response</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activeOffers.map((offer) => (
+                <tr key={offer.id}>
+                  <td>
+                    <Link to={`/listings/${offer.listing.id}`} style={{ fontWeight: "700" }}>
+                      {offer.listing.title}
+                    </Link>
+                  </td>
+                  <td>{offer.listing.seller?.fullName}</td>
+                  <td>
+                    <strong>{formatMoney(offer.offerPrice)}</strong>
+                  </td>
+                  <td>{offer.quantity} {offer.listing.unit}</td>
+                  <td>
+                    {offer.counterPrice ? (
+                      <div>
+                        <strong>{formatMoney(offer.counterPrice)}</strong>
+                        <span style={{ display: "block", fontSize: "11px", color: "var(--muted-foreground)" }}>
+                          {offer.sellerMessage || "Counter proposed"}
+                        </span>
+                      </div>
+                    ) : (
+                      <span style={{ color: "var(--muted-foreground)", fontSize: "12px" }}>Awaiting Review</span>
+                    )}
+                  </td>
+                  <td>
+                    <span className={`status-stamp ${offer.status}`}>{offer.status}</span>
+                  </td>
+                  <td>
+                    <OfferActions offer={offer} role="BUYER" reload={reload} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ padding: "40px", border: "1.5px solid var(--border)", textAlign: "center" }}>
+          <p style={{ color: "var(--muted-foreground)" }}>No active offers currently pending.</p>
+        </div>
+      )}
+    </>
+  );
 }
 
 function SellerDashboard({ data, reload }) {
   const activeListings = data.listings.filter((item) => ["AVAILABLE", "UNDER_NEGOTIATION"].includes(item.status));
-  const exportInventory = () => downloadCsv("inventory-liquidation-summary.csv",
-    ["SKU", "Listing", "Category", "Original price", "Liquidation price", "Discount percent", "Quantity", "Unit", "Location", "Condition", "Expiry date", "Status"],
-    data.listings.map((item) => [item.sku, item.title, item.category?.title, item.originalPrice, item.price,
-      item.discountPercentage, item.quantity, item.unit, item.location, item.condition, item.expiryDate, item.status]));
-  return <><div className="dashboard-toolbar"><span className="muted">Inventory health and liquidation pipeline</span><div className="action-row"><Link className="button secondary" to="/seller/listings/import">Import CSV</Link><button className="button secondary" onClick={exportInventory}>Export CSV</button><button className="button secondary" onClick={() => window.print()}>Print / Save PDF</button></div></div><div className="stats-grid dashboard-stats"><Stat label="Active listings" value={activeListings.length} /><Stat label="Listed stock value" value={formatMoney(data.listedStockValue)} /><Stat label="Original stock value" value={formatMoney(data.tiedUpCapital)} /><Stat label="Offers to review" value={data.pendingOfferCount} /></div><InventoryAnalytics listings={data.listings} /><div className="section-heading compact"><div><h2>My inventory</h2></div><Link className="button secondary" to="/seller/listings/new">＋ Add stock</Link></div>{data.listings.length ? <div className="table-wrap"><table><thead><tr><th>SKU / Listing</th><th>Asking price</th><th>Quantity</th><th>Location</th><th>Expiry / obsolescence</th><th>Status</th><th>Actions</th></tr></thead><tbody>{data.listings.map((item) => <tr key={item.id}><td><small>{item.sku || "—"}</small><Link to={`/listings/${item.id}`}>{item.title}</Link></td><td>{formatMoney(item.price)}<small>{item.discountPercentage}% below original</small></td><td>{item.quantity} {item.unit}</td><td>{item.location}</td><td>{item.expiryDate || "Not specified"}</td><td><Status value={item.status} /></td><td className="action-row"><Link className="button tiny secondary" to={`/seller/listings/${item.id}/edit`}>Edit</Link><button className="button tiny danger" onClick={() => confirmAction("Remove this listing?", () => api(`/api/listings/${item.id}`, { method: "DELETE" }).then(reload))}>Remove</button></td></tr>)}</tbody></table></div> : <EmptyState title="No inventory listed" text="Post your first surplus listing to reach buyers." link="/seller/listings/new" linkText="Create listing" />}
-    <div className="section-heading compact top-space"><div><h2>Incoming offers</h2></div><span className="muted">{data.offers.length} total</span></div>{data.offers.length ? <div className="table-wrap"><table><thead><tr><th>Listing / buyer</th><th>Offer</th><th>Quantity</th><th>Message</th><th>Status</th><th>Actions</th></tr></thead><tbody>{data.offers.map((offer) => <tr key={offer.id}><td><Link to={`/listings/${offer.listing.id}`}>{offer.listing.title}</Link><small>{offer.buyer?.fullName} · {offer.buyer?.email}</small></td><td>{formatMoney(offer.offerPrice)}{offer.counterPrice && <small>Counter: {formatMoney(offer.counterPrice)}</small>}</td><td>{offer.quantity} {offer.listing.unit}</td><td>{offer.buyerMessage || "—"}</td><td><Status value={offer.status} /></td><td><OfferActions offer={offer} role="SELLER" reload={reload} /></td></tr>)}</tbody></table></div> : <div className="empty-inline">No offers received yet.</div>}</>;
-}
 
-function InventoryAnalytics({ listings }) {
-  const categories = new Map();
-  listings.filter((item) => ["AVAILABLE", "UNDER_NEGOTIATION"].includes(item.status)).forEach((item) => {
-    const title = item.category?.title || "Uncategorized";
-    categories.set(title, (categories.get(title) || 0) + Number(item.price) * Number(item.quantity));
-  });
-  const totals = [...categories.entries()].sort((a, b) => b[1] - a[1]);
-  const maxValue = Math.max(1, ...totals.map(([, amount]) => amount));
-  return <section className="panel analytics-panel"><div className="section-heading compact"><div><p className="overline">Inventory analytics</p><h2>Liquidation value by category</h2></div><span className="tag">{totals.length} categories</span></div>{totals.length ? <div className="analytics-bars">{totals.map(([category, amount]) => <div className="analytics-row" key={category}><span>{category}</span><div className="analytics-track"><span style={{ width: `${Math.max(3, amount / maxValue * 100)}%` }} /></div><strong>{formatMoney(amount)}</strong></div>)}</div> : <div className="empty-inline">Inventory analytics will appear when active listings are added.</div>}</section>;
+  const exportInventory = () =>
+    downloadCsv(
+      "inventory-ledger.csv",
+      ["SKU", "Title", "Category", "Original Price", "Liquidation Price", "Quantity", "Unit", "Location", "Status"],
+      data.listings.map((item) => [
+        item.sku,
+        item.title,
+        item.category?.title,
+        item.originalPrice,
+        item.price,
+        item.quantity,
+        item.unit,
+        item.location,
+        item.status,
+      ])
+    );
+
+  return (
+    <>
+      <div className="mono-inverted-stats" style={{ marginBottom: "36px" }}>
+        <div className="stat-cell">
+          <div className="stat-number-serif">{activeListings.length}</div>
+          <div className="stat-label-mono">Active Material Lots</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-number-serif">
+            ₹{formatMoney(data.listedStockValue).replace("₹", "").trim()}
+          </div>
+          <div className="stat-label-mono">Listed Liquidation Value</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-number-serif">{data.pendingOfferCount}</div>
+          <div className="stat-label-mono">Proposals Requiring Review</div>
+        </div>
+        <div className="stat-cell" style={{ display: "flex", alignItems: "center" }}>
+          <button className="button secondary tiny" onClick={exportInventory} style={{ background: "#FFFFFF", color: "#000000" }}>
+            <IconDownload size={14} /> Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <h3 className="section-title-serif" style={{ fontSize: "1.35rem" }}>Cataloged Surplus Inventory</h3>
+        <Link className="button primary tiny" to="/seller/listings/new">
+          + Post Surplus Stock
+        </Link>
+      </div>
+
+      {data.listings.length ? (
+        <div className="mono-table-wrapper" style={{ marginBottom: "36px" }}>
+          <table className="mono-table">
+            <thead>
+              <tr>
+                <th>SKU / Material</th>
+                <th>Price Valuation</th>
+                <th>Stock Quantity</th>
+                <th>Yard Location</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.listings.map((item) => (
+                <tr key={item.id}>
+                  <td>
+                    <span style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--muted-foreground)" }}>
+                      {item.sku || "—"}
+                    </span>
+                    <Link to={`/listings/${item.id}`} style={{ fontWeight: "700" }}>
+                      {item.title}
+                    </Link>
+                  </td>
+                  <td>
+                    <strong>{formatMoney(item.price)}</strong>
+                    <span style={{ display: "block", fontSize: "11px", color: "var(--muted-foreground)" }}>
+                      {item.discountPercentage}% off list
+                    </span>
+                  </td>
+                  <td>{item.quantity} {item.unit}</td>
+                  <td>{item.location}</td>
+                  <td>
+                    <span className={`status-stamp ${item.status}`}>{item.status}</span>
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <Link className="button secondary tiny" to={`/seller/listings/${item.id}/edit`}>
+                        Edit
+                      </Link>
+                      <button
+                        className="button danger tiny"
+                        onClick={() =>
+                          confirmAction("Delist this inventory item?", () =>
+                            api(`/api/listings/${item.id}`, { method: "DELETE" }).then(reload)
+                          )
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ padding: "40px", border: "1.5px solid var(--border)", textAlign: "center", marginBottom: "36px" }}>
+          <p style={{ color: "var(--muted-foreground)" }}>No inventory currently cataloged.</p>
+        </div>
+      )}
+
+      {/* Incoming Offers */}
+      <div style={{ marginBottom: "16px" }}>
+        <h3 className="section-title-serif" style={{ fontSize: "1.35rem" }}>Incoming Purchase Proposals</h3>
+      </div>
+
+      {data.offers.length ? (
+        <div className="mono-table-wrapper">
+          <table className="mono-table">
+            <thead>
+              <tr>
+                <th>Lot / Counterparty</th>
+                <th>Offered Price</th>
+                <th>Quantity</th>
+                <th>Proposal Note</th>
+                <th>Status</th>
+                <th>Negotiate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.offers.map((offer) => (
+                <tr key={offer.id}>
+                  <td>
+                    <Link to={`/listings/${offer.listing.id}`} style={{ fontWeight: "700" }}>
+                      {offer.listing.title}
+                    </Link>
+                    <span style={{ display: "block", fontSize: "11px", color: "var(--muted-foreground)" }}>
+                      {offer.buyer?.fullName} ({offer.buyer?.email})
+                    </span>
+                  </td>
+                  <td>
+                    <strong>{formatMoney(offer.offerPrice)}</strong>
+                    {offer.counterPrice && (
+                      <span style={{ display: "block", fontSize: "11px", fontWeight: "700" }}>
+                        Counter: {formatMoney(offer.counterPrice)}
+                      </span>
+                    )}
+                  </td>
+                  <td>{offer.quantity} {offer.listing.unit}</td>
+                  <td style={{ maxWidth: "240px", fontSize: "12.5px", color: "var(--muted-foreground)" }}>
+                    {offer.buyerMessage || "—"}
+                  </td>
+                  <td>
+                    <span className={`status-stamp ${offer.status}`}>{offer.status}</span>
+                  </td>
+                  <td>
+                    <OfferActions offer={offer} role="SELLER" reload={reload} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ padding: "40px", border: "1.5px solid var(--border)", textAlign: "center" }}>
+          <p style={{ color: "var(--muted-foreground)" }}>No offers currently received.</p>
+        </div>
+      )}
+    </>
+  );
 }
 
 function OfferActions({ offer, role, reload }) {
@@ -469,191 +1752,593 @@ function OfferActions({ offer, role, reload }) {
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
   const active = ["PENDING", "COUNTER_OFFERED"].includes(offer.status);
+
   const action = async (path, method = "POST", body) => {
-    setWorking(true); setError("");
-    try { await api(path, { method, body: body ? JSON.stringify(body) : undefined }); reload(); }
-    catch (reason) { setError(reason.message); }
-    finally { setWorking(false); }
+    setWorking(true);
+    setError("");
+    try {
+      await api(path, { method, body: body ? JSON.stringify(body) : undefined });
+      reload();
+    } catch (reason) {
+      setError(reason.message);
+    } finally {
+      setWorking(false);
+    }
   };
-  if (!active) return <span className="muted">—</span>;
-  return <div className="offer-actions">
-    {role === "SELLER" && <form className="counter-form" onSubmit={(event) => { event.preventDefault(); action(`/api/offers/${offer.id}/counter`, "POST", { counterPrice: Number(counterPrice), sellerMessage: event.currentTarget.message.value }); }}><input aria-label="Counter-offer price" type="number" min="0.01" step="0.01" value={counterPrice} onChange={(e) => setCounterPrice(e.target.value)} required /><input name="message" aria-label="Counter-offer message" placeholder="Message (optional)" /><button className="button tiny secondary" disabled={working}>Counter</button></form>}
-    {role === "SELLER" && <button className="button tiny primary" disabled={working} onClick={() => action(`/api/offers/${offer.id}/accept`)}>Accept</button>}
-    {role === "BUYER" && offer.status === "COUNTER_OFFERED" && <button className="button tiny primary" disabled={working} onClick={() => action(`/api/offers/${offer.id}/accept`)}>Accept counter</button>}
-    <button className="button tiny danger" disabled={working} onClick={() => action(`/api/offers/${offer.id}/reject`)}>Decline</button>
-    {error && <small className="field-error">{error}</small>}
-  </div>;
+
+  if (!active) return <span style={{ color: "var(--muted-foreground)" }}>—</span>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+      {role === "SELLER" && (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            action(`/api/offers/${offer.id}/counter`, "POST", {
+              counterPrice: Number(counterPrice),
+              sellerMessage: event.currentTarget.message.value,
+            });
+          }}
+          style={{ display: "flex", gap: "4px" }}
+        >
+          <input
+            style={{ width: "80px", padding: "4px 8px", fontSize: "12px", border: "1.5px solid var(--border)", background: "var(--background)" }}
+            aria-label="Counter price"
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={counterPrice}
+            onChange={(e) => setCounterPrice(e.target.value)}
+            required
+          />
+          <input
+            name="message"
+            style={{ width: "90px", padding: "4px 8px", fontSize: "12px", border: "1.5px solid var(--border)", background: "var(--background)" }}
+            placeholder="Terms"
+          />
+          <button className="button secondary tiny" disabled={working}>
+            Counter
+          </button>
+        </form>
+      )}
+
+      <div style={{ display: "flex", gap: "4px" }}>
+        {role === "SELLER" && (
+          <button className="button primary tiny" disabled={working} onClick={() => action(`/api/offers/${offer.id}/accept`)}>
+            Accept Deal
+          </button>
+        )}
+        {role === "BUYER" && offer.status === "COUNTER_OFFERED" && (
+          <button className="button primary tiny" disabled={working} onClick={() => action(`/api/offers/${offer.id}/accept`)}>
+            Accept Counter
+          </button>
+        )}
+        <button className="button danger tiny" disabled={working} onClick={() => action(`/api/offers/${offer.id}/reject`)}>
+          Decline
+        </button>
+      </div>
+
+      {error && <span style={{ fontSize: "11px", color: "#000000", fontWeight: 700 }}>{error}</span>}
+    </div>
+  );
 }
 
 function AdminDashboard({ reload }) {
   const { data: stats, loading: statsLoading, error: statsError } = useLoad(() => api("/api/admin/stats"));
   const { data: businesses, loading: businessesLoading, error: businessesError, reload: reloadBusinesses } = useLoad(() => api("/api/admin/businesses"));
-  const { data: listings, loading: listingsLoading, error: listingsError, reload: reloadListings } = useLoad(() => api("/api/admin/listings"));
-  const { data: reports, loading: reportsLoading, error: reportsError, reload: reloadReports } = useLoad(() => api("/api/admin/reports"));
   const [actionError, setActionError] = useState("");
-  const update = async (url) => { await api(url, { method: "PUT" }); reloadBusinesses(); reload(); };
-  const remove = async (id) => { await api(`/api/admin/listings/${id}`, { method: "DELETE" }); reloadListings(); };
-  const reviewReport = async (id, action) => { await api(`/api/admin/reports/${id}/${action}`, { method: "PUT" }); reloadReports(); reloadListings(); };
+
+  const update = async (url) => {
+    await api(url, { method: "PUT" });
+    reloadBusinesses();
+    reload();
+  };
   const runAction = (action) => action().catch((reason) => setActionError(reason.message));
-  const exportListings = () => downloadCsv("platform-inventory-report.csv",
-    ["SKU", "Listing", "Seller", "Category", "Original price", "Liquidation price", "Quantity", "Unit", "Location", "Expiry date", "Status"],
-    (listings || []).map((item) => [item.sku, item.title, item.seller?.fullName, item.category?.title,
-      item.originalPrice, item.price, item.quantity, item.unit, item.location, item.expiryDate, item.status]));
-  return <><div className="dashboard-toolbar"><span className="muted">Marketplace performance and moderation</span><div className="action-row"><button className="button secondary" onClick={exportListings}>Export CSV</button><button className="button secondary" onClick={() => window.print()}>Print / Save PDF</button></div></div><Notice message={actionError} kind="error" onClose={() => setActionError("")} /><PageState loading={statsLoading} error={statsError}><div className="stats-grid dashboard-stats"><Stat label="Businesses" value={stats.totalUsers} /><Stat label="Sellers" value={stats.totalSellers} /><Stat label="Buyers" value={stats.totalBuyers} /><Stat label="Listings" value={stats.totalListings} /><Stat label="Active surplus value" value={formatMoney(stats.totalActiveSurplusValue)} /><Stat label="Negotiations" value={stats.totalOffers} /><Stat label="Confirmed deals" value={stats.acceptedDealsCount} /><Stat label="Accepted deal volume" value={formatMoney(stats.totalAcceptedDealVolume)} /></div></PageState>
-    <InventoryAnalytics listings={listings || []} />
-    <div className="section-heading compact top-space"><div><h2>Business verification queue</h2><p>Review submitted business profiles.</p></div><span className="tag">{stats?.pendingVerifications ?? 0} pending</span></div>
-    <PageState loading={businessesLoading} error={businessesError}>{businesses?.length ? <div className="table-wrap"><table><thead><tr><th>Business</th><th>Owner</th><th>Tax ID</th><th>Location</th><th>Status</th><th>Review</th></tr></thead><tbody>{businesses.map((business) => <tr key={business.id}><td>{business.companyName}<small>{business.industryType}</small></td><td>{business.fullName}<small>{business.email}</small></td><td>{business.taxId}</td><td>{business.city}, {business.state}</td><td><Status value={business.verificationStatus} /></td><td className="action-row">{business.verificationStatus !== "APPROVED" && <button className="button tiny primary" onClick={() => runAction(() => update(`/api/admin/verify/${business.id}`))}>Approve</button>}{business.verificationStatus !== "REJECTED" && <button className="button tiny danger" onClick={() => runAction(() => update(`/api/admin/reject/${business.id}`))}>Reject</button>}</td></tr>)}</tbody></table></div> : <EmptyState title="No businesses to review" text="New business registrations will appear here." />}</PageState>
-    <div className="section-heading compact top-space"><div><h2>Listing moderation</h2></div></div><PageState loading={listingsLoading} error={listingsError}>{listings?.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Seller</th><th>Category</th><th>Price</th><th>Location</th><th>Status</th><th>Moderation</th></tr></thead><tbody>{listings.map((item) => <tr key={item.id}><td><Link to={`/listings/${item.id}`}>{item.title}</Link></td><td>{item.seller?.fullName}</td><td>{item.category?.title}</td><td>{formatMoney(item.price)}</td><td>{item.location}</td><td><Status value={item.status} /></td><td><button className="button tiny danger" onClick={() => window.confirm("Remove this listing?") && runAction(() => remove(item.id))}>Remove</button></td></tr>)}</tbody></table></div> : <EmptyState title="No listings" text="Listings will appear here for moderation." />}</PageState>
-    <div className="section-heading compact top-space"><div><h2>Reported listings</h2><p>Review reports submitted by marketplace businesses.</p></div><span className="tag">{reports?.length ?? 0} pending</span></div><PageState loading={reportsLoading} error={reportsError}>{reports?.length ? <div className="table-wrap"><table><thead><tr><th>Listing</th><th>Reported by</th><th>Reason</th><th>Reported</th><th>Review</th></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td><Link to={`/listings/${report.listing.id}`}>{report.listing.title}</Link><small>{report.listing.seller?.fullName}</small></td><td>{report.reporter.fullName}<small>{report.reporter.email}</small></td><td>{report.reason}</td><td>{report.createdAt ? new Date(report.createdAt).toLocaleDateString("en-IN") : "—"}</td><td className="action-row"><button className="button tiny secondary" onClick={() => runAction(() => reviewReport(report.id, "dismiss"))}>Dismiss</button><button className="button tiny danger" onClick={() => window.confirm("Delist this reported listing?") && runAction(() => reviewReport(report.id, "delist"))}>Delist</button></td></tr>)}</tbody></table></div> : <EmptyState title="No reports to review" text="New listing reports will appear here." />}</PageState>
-  </>;
+
+  return (
+    <>
+      <Notice message={actionError} kind="error" onClose={() => setActionError("")} />
+
+      <PageState loading={statsLoading} error={statsError}>
+        <div className="mono-inverted-stats" style={{ marginBottom: "36px" }}>
+          <div className="stat-cell">
+            <div className="stat-number-serif">{stats?.totalUsers ?? "—"}</div>
+            <div className="stat-label-mono">Enterprises</div>
+          </div>
+          <div className="stat-cell">
+            <div className="stat-number-serif">{stats?.totalListings ?? 0}</div>
+            <div className="stat-label-mono">Cataloged Lots</div>
+          </div>
+          <div className="stat-cell">
+            <div className="stat-number-serif">
+              ₹{formatMoney(stats?.totalActiveSurplusValue).replace("₹", "").trim()}
+            </div>
+            <div className="stat-label-mono">Surplus Valuation</div>
+          </div>
+          <div className="stat-cell">
+            <div className="stat-number-serif">{stats?.acceptedDealsCount ?? 0}</div>
+            <div className="stat-label-mono">Closed Transactions</div>
+          </div>
+        </div>
+      </PageState>
+
+      <div style={{ marginBottom: "16px" }}>
+        <h3 className="section-title-serif" style={{ fontSize: "1.35rem" }}>Corporate Accreditation Queue</h3>
+      </div>
+
+      <PageState loading={businessesLoading} error={businessesError}>
+        {businesses?.length ? (
+          <div className="mono-table-wrapper">
+            <table className="mono-table">
+              <thead>
+                <tr>
+                  <th>Corporate Name</th>
+                  <th>Contact</th>
+                  <th>Tax ID / GST</th>
+                  <th>Jurisdiction</th>
+                  <th>Status</th>
+                  <th>Accreditation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {businesses.map((biz) => (
+                  <tr key={biz.id}>
+                    <td>
+                      <strong>{biz.companyName}</strong>
+                    </td>
+                    <td>{biz.fullName} ({biz.email})</td>
+                    <td style={{ fontFamily: "var(--font-mono)" }}>{biz.taxId}</td>
+                    <td>{biz.city}, {biz.state}</td>
+                    <td>
+                      <span className={`status-stamp ${biz.verificationStatus}`}>{biz.verificationStatus}</span>
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {biz.verificationStatus !== "APPROVED" && (
+                          <button className="button primary tiny" onClick={() => runAction(() => update(`/api/admin/verify/${biz.id}`))}>
+                            Approve
+                          </button>
+                        )}
+                        {biz.verificationStatus !== "REJECTED" && (
+                          <button className="button danger tiny" onClick={() => runAction(() => update(`/api/admin/reject/${biz.id}`))}>
+                            Reject
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ padding: "32px", border: "1.5px solid var(--border)", textAlign: "center" }}>
+            <p style={{ color: "var(--muted-foreground)" }}>No accreditations pending review.</p>
+          </div>
+        )}
+      </PageState>
+    </>
+  );
 }
 
+/* ==========================================================================
+   Listing Form Page: Post & Edit Surplus Lots
+   ========================================================================== */
 function ListingFormPage() {
   const { id } = useParams();
   const editing = Boolean(id);
   const { data: categories, loading: categoriesLoading, error: categoriesError } = useLoad(() => api("/api/categories"));
-  const { data: current, loading: listingLoading, error: listingError } = useLoad(() => editing ? api(`/api/listings/${id}`) : Promise.resolve(null), [id]);
+  const { data: current, loading: listingLoading, error: listingError } = useLoad(
+    () => (editing ? api(`/api/listings/${id}`) : Promise.resolve(null)),
+    [id]
+  );
   const { user } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
   const submit = async (event) => {
-    event.preventDefault(); setBusy(true); setError("");
+    event.preventDefault();
+    setBusy(true);
+    setError("");
     const values = Object.fromEntries(new FormData(event.currentTarget).entries());
     values.categoryId = Number(values.categoryId);
     values.originalPrice = Number(values.originalPrice);
     values.price = Number(values.price);
     values.quantity = Number(values.quantity);
-    values.tags = values.tags.split(",").map((tag) => tag.trim()).filter(Boolean);
+    values.tags = values.tags ? values.tags.split(",").map((t) => t.trim()).filter(Boolean) : [];
+
     try {
       if (editing) await api(`/api/listings/${id}`, { method: "PUT", body: JSON.stringify(values) });
       else await api("/api/listings", { method: "POST", body: JSON.stringify(values) });
       navigate("/seller/dashboard");
-    } catch (reason) { setError(reason.message); } finally { setBusy(false); }
+    } catch (reason) {
+      setError(reason.message);
+    } finally {
+      setBusy(false);
+    }
   };
-  return <RequireRole roles={["SELLER"]}><div className="page-container narrow-page"><div className="page-heading"><div><p className="overline">Seller inventory</p><h1>{editing ? "Edit listing" : "Post surplus stock"}</h1><p>Share clear details so buyers can make informed offers.</p></div></div><PageState loading={categoriesLoading || listingLoading} error={categoriesError || listingError}><Notice message={error} kind="error" onClose={() => setError("")} /><form className="panel form-grid" onSubmit={submit}>
-    <label className="field-label">SKU<input className="input" name="sku" defaultValue={current?.sku} maxLength="64" pattern="[A-Za-z0-9._/-]+" placeholder="e.g. SKU-STEEL-042" required /></label>
-    <label className="field-label span-two">Listing title<input className="input" name="title" defaultValue={current?.title} maxLength="200" required /></label>
-    <label className="field-label span-two">Description<textarea className="input" name="description" rows="5" defaultValue={current?.description} required /></label>
-    <label className="field-label">Category<select className="input" name="categoryId" defaultValue={current?.category?.id ?? ""} required><option value="" disabled>Select a category</option>{categories?.map((category) => <option key={category.id} value={category.id}>{category.title}</option>)}</select></label>
-    <label className="field-label">Condition<select className="input" name="condition" defaultValue={current?.condition ?? "BRAND_NEW_SURPLUS"}>{Object.entries(conditionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-    <label className="field-label">Original price (₹)<input className="input" name="originalPrice" type="number" min="0.01" step="0.01" defaultValue={current?.originalPrice} required /></label>
-    <label className="field-label">Surplus price (₹)<input className="input" name="price" type="number" min="0.01" step="0.01" defaultValue={current?.price} required /></label>
-    <label className="field-label">Quantity<input className="input" name="quantity" type="number" min="1" step="1" defaultValue={current?.quantity} required /></label>
-    <label className="field-label">Unit<input className="input" name="unit" maxLength="30" defaultValue={current?.unit} placeholder="e.g. Tons, Pieces" required /></label>
-    <label className="field-label span-two">Pickup location<input className="input" name="location" maxLength="150" defaultValue={current?.location || [user?.businessProfile?.city, user?.businessProfile?.state].filter(Boolean).join(", ")} required /></label>
-    <label className="field-label span-two">Tags <span className="muted">(up to 10, comma-separated)</span><input className="input" name="tags" defaultValue={current?.tags?.join(", ")} placeholder="e.g. recyclable, stainless steel, bulk" /></label>
-    <label className="field-label">Expiry / obsolescence date<input className="input" name="expiryDate" type="date" defaultValue={current?.expiryDate || ""} /></label>
-    <label className="field-label span-two">Product image URL <span className="muted">(optional)</span><input className="input" name="imageUrl" type="url" defaultValue={current?.imageUrl} placeholder="https://…" /></label>
-    <div className="form-actions span-two"><Link className="button secondary" to="/seller/dashboard">Cancel</Link><Link className="button secondary" to="/seller/listings/import">Bulk intake</Link><button className="button primary" disabled={busy}>{busy ? "Saving…" : editing ? "Save changes" : "Publish listing"}</button></div>
-  </form></PageState></div></RequireRole>;
+
+  return (
+    <RequireRole roles={["SELLER"]}>
+      <div className="page-container" style={{ maxWidth: "780px" }}>
+        <div className="section-header-bar" style={{ marginBottom: "24px" }}>
+          <div>
+            <h1 className="section-title-serif">{editing ? "Edit Material Lot" : "Index Surplus Stock"}</h1>
+            <p className="section-subtitle-mono">Provide accurate technical specifications and storage coordinates</p>
+          </div>
+        </div>
+
+        <PageState loading={categoriesLoading || listingLoading} error={categoriesError || listingError}>
+          <Notice message={error} kind="error" onClose={() => setError("")} />
+
+          <form onSubmit={submit} style={{ background: "var(--background)", border: "2px solid var(--border)", padding: "36px", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "18px" }}>
+            <div>
+              <label className="field-label-mono">SKU / Reference ID</label>
+              <input className="editorial-input" name="sku" defaultValue={current?.sku} placeholder="e.g. SKU-STEEL-09" required />
+            </div>
+
+            <div>
+              <label className="field-label-mono">Classification</label>
+              <select className="editorial-input" name="categoryId" defaultValue={current?.category?.id ?? ""} required>
+                <option value="" disabled>Select category</option>
+                {categories?.map((c) => (
+                  <option key={c.id} value={c.id}>{c.title}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label className="field-label-mono">Listing Title</label>
+              <input className="editorial-input" name="title" defaultValue={current?.title} placeholder="e.g. Structural Steel I-Beams (W12x26)" required />
+            </div>
+
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label className="field-label-mono">Technical Description</label>
+              <textarea className="editorial-input" name="description" rows="4" defaultValue={current?.description} placeholder="Grade, finish, storage condition, certifications..." required />
+            </div>
+
+            <div>
+              <label className="field-label-mono">Condition</label>
+              <select className="editorial-input" name="condition" defaultValue={current?.condition ?? "BRAND_NEW_SURPLUS"}>
+                {Object.entries(conditionLabels).map(([val, label]) => (
+                  <option key={val} value={val}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="field-label-mono">Pickup Yard Location</label>
+              <input className="editorial-input" name="location" defaultValue={current?.location || [user?.businessProfile?.city, user?.businessProfile?.state].filter(Boolean).join(", ")} required />
+            </div>
+
+            <div>
+              <label className="field-label-mono">Original Valuation (₹)</label>
+              <input className="editorial-input" name="originalPrice" type="number" min="0.01" step="0.01" defaultValue={current?.originalPrice} required />
+            </div>
+
+            <div>
+              <label className="field-label-mono">Surplus Price (₹)</label>
+              <input className="editorial-input" name="price" type="number" min="0.01" step="0.01" defaultValue={current?.price} required />
+            </div>
+
+            <div>
+              <label className="field-label-mono">Available Quantity</label>
+              <input className="editorial-input" name="quantity" type="number" min="1" step="1" defaultValue={current?.quantity} required />
+            </div>
+
+            <div>
+              <label className="field-label-mono">Unit Measure</label>
+              <input className="editorial-input" name="unit" defaultValue={current?.unit} placeholder="e.g. Tons, Meters, Sheets" required />
+            </div>
+
+            <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px" }}>
+              <Link className="button secondary" to="/seller/dashboard">Cancel</Link>
+              <button className="button primary large" disabled={busy}>
+                {busy ? "Publishing…" : editing ? "Save Revisions" : "Index Surplus Lot →"}
+              </button>
+            </div>
+          </form>
+        </PageState>
+      </div>
+    </RequireRole>
+  );
 }
 
+/* ==========================================================================
+   Spreadsheet Bulk Import Page
+   ========================================================================== */
 function BulkListingImportPage() {
   const { data: categories, loading, error } = useLoad(() => api("/api/categories"));
   const [listings, setListings] = useState([]);
   const [fileError, setFileError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
-  const categoryLookup = useMemo(() => new Map((categories || []).map((category) => [category.title.trim().toLowerCase(), category.id])), [categories]);
-  const downloadTemplate = () => downloadCsv("inventory-intake-template.csv",
-    ["sku", "title", "description", "category", "originalPrice", "price", "quantity", "unit", "condition", "location", "expiryDate", "imageUrl", "tags"],
-    [["SKU-001", "Surplus steel sheets", "Unused surplus, stored indoors", "Construction & Raw Metals", 8200, 5900, 24, "Sheets", "BRAND_NEW_SURPLUS", "Pune, Maharashtra", "", "", "steel; bulk"]]);
+
+  const categoryLookup = useMemo(
+    () => new Map((categories || []).map((cat) => [cat.title.trim().toLowerCase(), cat.id])),
+    [categories]
+  );
+
+  const downloadTemplate = () =>
+    downloadCsv(
+      "inventory-intake-template.csv",
+      ["sku", "title", "description", "category", "originalPrice", "price", "quantity", "unit", "condition", "location", "expiryDate", "imageUrl", "tags"],
+      [["SKU-001", "Surplus Steel Plates", "Unused steel plates, clean indoor warehouse storage", "Construction & Raw Metals", 8500, 5200, 30, "Plates", "BRAND_NEW_SURPLUS", "Ahmedabad, Gujarat", "", "", "steel; prime surplus"]]
+    );
+
   const onFile = async (event) => {
     const file = event.target.files?.[0];
     setListings([]);
     setFileError("");
     setNotice("");
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setFileError("CSV file must be smaller than 2 MB.");
-      return;
-    }
+
     try {
       const parsed = parseCsv((await file.text()).replace(/^\uFEFF/, ""));
-      if (parsed.length > 100) throw new Error("Import up to 100 listings at a time.");
-      const requiredHeaders = ["sku", "title", "description", "category", "originalprice", "price", "quantity", "unit", "condition", "location"];
-      const normalized = parsed.map((row, index) => {
-        const values = Object.fromEntries(Object.entries(row).map(([key, value]) => [key.trim().toLowerCase(), value]));
-        const missing = requiredHeaders.filter((header) => !values[header]);
-        if (missing.length) throw new Error(`Row ${index + 2} is missing: ${missing.join(", ")}.`);
-        const categoryId = categoryLookup.get(values.category.trim().toLowerCase());
-        if (!categoryId) throw new Error(`Row ${index + 2} has an unknown category: ${values.category}.`);
-        const originalPrice = Number(values.originalprice);
-        const price = Number(values.price);
-        const quantity = Number(values.quantity);
-        if (![originalPrice, price, quantity].every(Number.isFinite) || originalPrice <= 0 || price <= 0 || quantity < 1 || !Number.isInteger(quantity)) {
-          throw new Error(`Row ${index + 2} must have positive prices and a whole-number quantity.`);
-        }
+      const required = ["sku", "title", "description", "category", "originalprice", "price", "quantity", "unit", "condition", "location"];
+
+      const normalized = parsed.map((row, idx) => {
+        const values = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
+        const missing = required.filter((h) => !values[h]);
+        if (missing.length) throw new Error(`Row ${idx + 2} is missing required fields: ${missing.join(", ")}`);
+        const catId = categoryLookup.get(values.category.trim().toLowerCase());
+        if (!catId) throw new Error(`Row ${idx + 2} unknown category: "${values.category}"`);
+
         return {
           sku: values.sku.trim(),
           title: values.title.trim(),
           description: values.description.trim(),
-          categoryId,
-          originalPrice,
-          price,
-          quantity,
+          categoryId: catId,
+          originalPrice: Number(values.originalprice),
+          price: Number(values.price),
+          quantity: Number(values.quantity),
           unit: values.unit.trim(),
           condition: values.condition.trim(),
           location: values.location.trim(),
           expiryDate: values.expirydate || null,
           imageUrl: values.imageurl || null,
-          tags: values.tags ? values.tags.split(";").map((tag) => tag.trim()).filter(Boolean) : [],
+          tags: values.tags ? values.tags.split(";").map((t) => t.trim()).filter(Boolean) : [],
         };
       });
-      const uniqueSkus = new Set(normalized.map((item) => item.sku.toUpperCase()));
-      if (uniqueSkus.size !== normalized.length) throw new Error("The file contains duplicate SKUs.");
+
       setListings(normalized);
-    } catch (reason) {
-      setFileError(reason.message);
+    } catch (err) {
+      setFileError(err.message);
     }
   };
+
   const submit = async () => {
     setBusy(true);
     setFileError("");
     try {
       const result = await api("/api/listings/bulk", { method: "POST", body: JSON.stringify(listings) });
-      setNotice(`${result.created} listings added to your inventory.`);
+      setNotice(`Successfully published ${result.created} surplus inventory items.`);
       setListings([]);
-    } catch (reason) {
-      setFileError(reason.message);
+    } catch (err) {
+      setFileError(err.message);
     } finally {
       setBusy(false);
     }
   };
-  return <RequireRole roles={["SELLER"]}><div className="page-container narrow-page"><div className="page-heading"><div><p className="overline">Inventory intake</p><h1>Bulk import listings</h1><p>Upload a CSV and preview rows before publishing them.</p></div></div><PageState loading={loading} error={error}><section className="panel stack-form"><Notice message={notice} onClose={() => setNotice("")} /><div className="import-instructions"><strong>CSV format</strong><p>Use the template. Categories must match a marketplace category exactly. Conditions use enum names, such as BRAND_NEW_SURPLUS. Separate tags with semicolons.</p><button type="button" className="button secondary" onClick={downloadTemplate}>Download CSV template</button></div><label className="field-label">Select inventory CSV<input className="input" type="file" accept=".csv,text/csv" onChange={onFile} /></label><Notice message={fileError} kind="error" onClose={() => setFileError("")} />{listings.length > 0 && <><div className="import-preview"><strong>{listings.length} listings ready</strong><span>Preview: {listings.slice(0, 3).map((item) => `${item.sku} · ${item.title}`).join(" / ")}</span></div><div className="form-actions"><Link className="button secondary" to="/seller/dashboard">Cancel</Link><button className="button primary" disabled={busy} onClick={submit}>{busy ? "Importing…" : `Publish ${listings.length} listings`}</button></div></>}</section></PageState></div></RequireRole>;
+
+  return (
+    <RequireRole roles={["SELLER"]}>
+      <div className="page-container" style={{ maxWidth: "780px" }}>
+        <div className="section-header-bar" style={{ marginBottom: "24px" }}>
+          <div>
+            <h1 className="section-title-serif">Spreadsheet Inventory Ingestion</h1>
+            <p className="section-subtitle-mono">Upload certified CSV spreadsheets to index lots in batch</p>
+          </div>
+          <button className="button secondary tiny" onClick={downloadTemplate}>
+            <IconDownload size={14} /> Sample Template
+          </button>
+        </div>
+
+        <PageState loading={loading} error={error}>
+          <Notice message={notice} onClose={() => setNotice("")} />
+          <Notice message={fileError} kind="error" onClose={() => setFileError("")} />
+
+          <div style={{ background: "var(--background)", border: "2px solid var(--border)", padding: "36px", textAlign: "center" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", display: "block", marginBottom: "14px" }}>
+              Select CSV Spreadsheet File
+            </span>
+            <input type="file" accept=".csv,text/csv" onChange={onFile} style={{ margin: "0 auto 20px" }} />
+
+            {listings.length > 0 && (
+              <div style={{ marginTop: "24px", textAlign: "left", borderTop: "1.5px solid var(--border)", paddingTop: "20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", textTransform: "uppercase", fontWeight: 700 }}>
+                    {listings.length} Lots Parsed &amp; Verified
+                  </span>
+                  <button className="button primary" disabled={busy} onClick={submit}>
+                    {busy ? "Ingesting…" : "Commit Lots to Exchange →"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </PageState>
+      </div>
+    </RequireRole>
+  );
 }
 
+/* ==========================================================================
+   Profile & Credentials Page
+   ========================================================================== */
 function ProfilePage() {
   const { data, error, loading, reload } = useLoad(() => api("/api/profile"));
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+
   const submit = async (event) => {
-    event.preventDefault(); setBusy(true); setNotice("");
+    event.preventDefault();
+    setBusy(true);
+    setNotice("");
     const values = Object.fromEntries(new FormData(event.currentTarget).entries());
-    try { await api("/api/profile", { method: "PUT", body: JSON.stringify(values) }); setNotice("Business profile updated."); reload(); }
-    catch (reason) { setNotice(reason.message); }
-    finally { setBusy(false); }
+    try {
+      await api("/api/profile", { method: "PUT", body: JSON.stringify(values) });
+      setNotice("Corporate accreditation profile revised.");
+      reload();
+    } catch (reason) {
+      setNotice(reason.message);
+    } finally {
+      setBusy(false);
+    }
   };
-  return <RequireRole roles={["BUYER", "SELLER", "ADMIN"]}><div className="page-container narrow-page"><div className="page-heading"><div><p className="overline">Account settings</p><h1>Business profile</h1><p>Manage the business details shown to marketplace partners.</p></div></div><PageState loading={loading} error={error}>{data && <section className="panel"><div className="profile-summary"><span className="avatar">{data.user.fullName?.[0]?.toUpperCase()}</span><div><strong>{data.user.fullName}</strong><span>{data.user.email} · {data.user.role}</span></div><Status value={data.businessProfile?.verificationStatus} /></div><Notice message={notice} kind={notice.includes("updated") ? "success" : "error"} onClose={() => setNotice("")} /><form className="form-grid" onSubmit={submit}>
-    <label className="field-label">Business name<input className="input" name="companyName" defaultValue={data.businessProfile?.companyName} required /></label><label className="field-label">GST / Tax ID<input className="input" name="taxId" defaultValue={data.businessProfile?.taxId} required /></label><label className="field-label span-two">Address<input className="input" name="address" defaultValue={data.businessProfile?.address} required /></label><label className="field-label">City<input className="input" name="city" defaultValue={data.businessProfile?.city} required /></label><label className="field-label">State<input className="input" name="state" defaultValue={data.businessProfile?.state} required /></label><label className="field-label">Postal code<input className="input" name="postalCode" defaultValue={data.businessProfile?.postalCode} /></label><label className="field-label">Phone<input className="input" name="phone" defaultValue={data.businessProfile?.phone} required /></label><label className="field-label span-two">Industry<input className="input" name="industryType" defaultValue={data.businessProfile?.industryType} /></label><button className="button primary span-two" disabled={busy}>{busy ? "Saving…" : "Save profile"}</button>
-  </form></section>}</PageState></div></RequireRole>;
+
+  return (
+    <RequireRole roles={["BUYER", "SELLER", "ADMIN"]}>
+      <div className="page-container" style={{ maxWidth: "780px" }}>
+        <div className="section-header-bar" style={{ marginBottom: "24px" }}>
+          <div>
+            <h1 className="section-title-serif">Business Credentials &amp; Standing</h1>
+            <p className="section-subtitle-mono">Audit trail and legal verification records</p>
+          </div>
+        </div>
+
+        <PageState loading={loading} error={error}>
+          {data && (
+            <div style={{ background: "var(--background)", border: "2px solid var(--border)", padding: "36px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "24px", paddingBottom: "16px", borderBottom: "1.5px solid var(--border)" }}>
+                <div>
+                  <h3 className="section-title-serif" style={{ fontSize: "1.45rem" }}>{data.user.fullName}</h3>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--muted-foreground)" }}>
+                    {data.user.email} · {data.user.role}
+                  </span>
+                </div>
+                <span className={`status-stamp ${data.businessProfile?.verificationStatus}`}>
+                  {data.businessProfile?.verificationStatus}
+                </span>
+              </div>
+
+              <Notice message={notice} onClose={() => setNotice("")} />
+
+              <form onSubmit={submit} style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
+                <div>
+                  <label className="field-label-mono">Registered Entity Name</label>
+                  <input className="editorial-input" name="companyName" defaultValue={data.businessProfile?.companyName} required />
+                </div>
+
+                <div>
+                  <label className="field-label-mono">GST / Tax Identification ID</label>
+                  <input className="editorial-input" name="taxId" defaultValue={data.businessProfile?.taxId} required />
+                </div>
+
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label className="field-label-mono">Commercial Address</label>
+                  <input className="editorial-input" name="address" defaultValue={data.businessProfile?.address} required />
+                </div>
+
+                <div>
+                  <label className="field-label-mono">City</label>
+                  <input className="editorial-input" name="city" defaultValue={data.businessProfile?.city} required />
+                </div>
+
+                <div>
+                  <label className="field-label-mono">State</label>
+                  <input className="editorial-input" name="state" defaultValue={data.businessProfile?.state} required />
+                </div>
+
+                <div style={{ gridColumn: "1 / -1", textAlign: "right", marginTop: "12px" }}>
+                  <button className="button primary large" disabled={busy}>
+                    {busy ? "Saving…" : "Update Corporate Profile →"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </PageState>
+      </div>
+    </RequireRole>
+  );
 }
 
+/* ==========================================================================
+   Notifications & Alerts Page
+   ========================================================================== */
 function NotificationsPage() {
   const { data, error, loading, reload } = useLoad(() => api("/api/notifications"));
   const [actionError, setActionError] = useState("");
-  const markAll = async () => { try { await api("/api/notifications/read-all", { method: "POST" }); reload(); } catch (reason) { setActionError(reason.message); } };
-  const markRead = async (id) => { try { await api(`/api/notifications/read/${id}`, { method: "POST" }); reload(); } catch (reason) { setActionError(reason.message); } };
-  return <RequireRole roles={["BUYER", "SELLER", "ADMIN"]}><div className="page-container narrow-page"><div className="page-heading"><div><p className="overline">Your account</p><h1>Notifications</h1><p>Updates about offers, deals, and business verification.</p></div><button className="button secondary" onClick={markAll}>Mark all as read</button></div><Notice message={actionError} kind="error" onClose={() => setActionError("")} /><PageState loading={loading} error={error}>{data?.length ? <div className="notification-list">{data.map((item) => <article className={item.read ? "notification read" : "notification"} key={item.id}><span className="notification-dot" /><div><strong>{item.title}</strong><p>{item.message}</p><small>{item.createdAt ? new Date(item.createdAt).toLocaleString("en-IN") : ""}</small></div>{!item.read && <button className="text-button" onClick={() => markRead(item.id)}>Mark read</button>}</article>)}</div> : <EmptyState title="You’re all caught up" text="Important marketplace updates will show here." />}</PageState></div></RequireRole>;
-}
 
-function Status({ value }) {
-  return <span className={`status ${value || ""}`}>{statusLabels[value] || value || "Unknown"}</span>;
-}
+  const markAll = async () => {
+    try {
+      await api("/api/notifications/read-all", { method: "POST" });
+      reload();
+    } catch (reason) {
+      setActionError(reason.message);
+    }
+  };
 
-function EmptyState({ title, text, link, linkText }) {
-  return <div className="empty-state"><span>▧</span><h2>{title}</h2><p>{text}</p>{link && <Link className="button primary" to={link}>{linkText}</Link>}</div>;
+  const markRead = async (id) => {
+    try {
+      await api(`/api/notifications/read/${id}`, { method: "POST" });
+      reload();
+    } catch (reason) {
+      setActionError(reason.message);
+    }
+  };
+
+  return (
+    <RequireRole roles={["BUYER", "SELLER", "ADMIN"]}>
+      <div className="page-container" style={{ maxWidth: "780px" }}>
+        <div className="section-header-bar" style={{ marginBottom: "24px" }}>
+          <div>
+            <h1 className="section-title-serif">Correspondence &amp; Alerts</h1>
+            <p className="section-subtitle-mono">Formal notifications of proposals, counter-offers, and deal closures</p>
+          </div>
+          <button className="button secondary tiny" onClick={markAll}>
+            Mark All Read
+          </button>
+        </div>
+
+        <Notice message={actionError} kind="error" onClose={() => setActionError("")} />
+
+        <PageState loading={loading} error={error}>
+          {data?.length ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {data.map((item) => (
+                <article
+                  key={item.id}
+                  style={{
+                    background: "var(--background)",
+                    border: "1.5px solid var(--border)",
+                    borderLeft: item.read ? "1.5px solid var(--border)" : "5px solid var(--foreground)",
+                    padding: "18px 22px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <div>
+                    <strong style={{ fontFamily: "var(--font-serif)", fontSize: "1.1rem", display: "block", marginBottom: "4px" }}>
+                      {item.title}
+                    </strong>
+                    <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--muted-foreground)", margin: "2px 0 6px" }}>
+                      {item.message}
+                    </p>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--muted-foreground)" }}>
+                      {item.createdAt ? new Date(item.createdAt).toLocaleString("en-IN") : ""}
+                    </span>
+                  </div>
+                  {!item.read && (
+                    <button className="button subtle tiny" onClick={() => markRead(item.id)}>
+                      Acknowledge
+                    </button>
+                  )}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div style={{ padding: "48px", border: "1.5px solid var(--border)", textAlign: "center" }}>
+              <p style={{ color: "var(--muted-foreground)" }}>All correspondence has been acknowledged.</p>
+            </div>
+          )}
+        </PageState>
+      </div>
+    </RequireRole>
+  );
 }
 
 function confirmAction(message, action) {
@@ -661,24 +2346,47 @@ function confirmAction(message, action) {
 }
 
 function App() {
-  return <BrowserRouter><AuthProvider><Routes>
-    <Route element={<Layout />}>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/browse" element={<BrowsePage />} />
-      <Route path="/listings/:id" element={<ListingDetailPage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/buyer/dashboard" element={<DashboardPage role="BUYER" />} />
-      <Route path="/seller/dashboard" element={<DashboardPage role="SELLER" />} />
-      <Route path="/seller/listings/new" element={<ListingFormPage />} />
-      <Route path="/seller/listings/:id/edit" element={<ListingFormPage />} />
-      <Route path="/seller/listings/import" element={<BulkListingImportPage />} />
-      <Route path="/admin/dashboard" element={<DashboardPage role="ADMIN" />} />
-      <Route path="/profile" element={<ProfilePage />} />
-      <Route path="/notifications" element={<NotificationsPage />} />
-      <Route path="*" element={<div className="page-container"><EmptyState title="Page not found" text="The page you’re looking for doesn’t exist." link="/" linkText="Go home" /></div>} />
-    </Route>
-  </Routes></AuthProvider></BrowserRouter>;
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/browse" element={<BrowsePage />} />
+            <Route path="/listings/:id" element={<ListingDetailPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/buyer/dashboard" element={<DashboardPage role="BUYER" />} />
+            <Route path="/seller/dashboard" element={<DashboardPage role="SELLER" />} />
+            <Route path="/seller/listings/new" element={<ListingFormPage />} />
+            <Route path="/seller/listings/:id/edit" element={<ListingFormPage />} />
+            <Route path="/seller/listings/import" element={<BulkListingImportPage />} />
+            <Route path="/admin/dashboard" element={<DashboardPage role="ADMIN" />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route
+              path="*"
+              element={
+                <div className="page-container" style={{ textAlign: "center", padding: "100px 0" }}>
+                  <h2 className="section-title-serif" style={{ fontSize: "2.2rem", marginBottom: "12px" }}>
+                    Record Not Found
+                  </h2>
+                  <p style={{ color: "var(--muted-foreground)", marginBottom: "24px" }}>
+                    The requested index does not exist in the active catalog.
+                  </p>
+                  <Link className="button primary" to="/">Return to Index</Link>
+                </div>
+              }
+            />
+          </Route>
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
 }
 
-createRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);
+createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
